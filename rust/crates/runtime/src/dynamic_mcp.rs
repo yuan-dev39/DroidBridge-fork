@@ -288,4 +288,20 @@ mod tests {
         assert!(valid_tool_name("mt_apk_workspace_open"));
         assert!(!valid_tool_name("bad name"));
     }
+
+    #[test]
+    fn registry_redacts_credentials_and_hides_disabled_servers() {
+        let registry = DynamicMcpRegistry::new();
+        let mut server = config("http://127.0.0.1:8787/mcp");
+        server.bearer_token = Some("local-secret".to_owned());
+        registry.upsert(server).unwrap();
+        let listed = registry.list_servers().unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0]["has_credential"], true);
+        assert!(listed[0].get("bearer_token").is_none());
+        assert!(registry.list_tools().unwrap().is_empty());
+        registry.set_enabled("mt-manager", false).unwrap();
+        assert_eq!(registry.list_servers().unwrap()[0]["enabled"], false);
+        assert!(registry.list_tools().unwrap().is_empty());
+    }
 }
