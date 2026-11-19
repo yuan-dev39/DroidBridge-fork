@@ -72,3 +72,6 @@ The registry handle is shared by the Root MCP listener and tunnel facade. Replac
 ## Remaining work before release
 
 The Root frontend now includes a localized external MCP service manager with add/edit/delete/enable/disable operations. APK AIDL/Keystore integration and JNI hot reload are now implemented in source; Shizuku-backed execution shares the APK Runtime host. Device verification remains. A GitHub Actions workflow checks Rust formatting/tests, shared UI tests, Root frontend Kotlin compilation and standalone APK AIDL/Kotlin compilation. Do not ship this branch as a stable release yet.
+
+
+Both editions clear legacy per-app locale overrides at startup and expose no manual language picker; the active language follows the device system locale (English fallback for unsupported locales).
