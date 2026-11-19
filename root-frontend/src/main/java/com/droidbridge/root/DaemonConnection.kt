@@ -119,6 +119,13 @@ class DaemonConnection(
 
     override suspend fun clearTunnel(): String = request("tunnel_clear").toString()
 
+    override suspend fun externalMcpSettings(): String = request("external_mcp_settings").toString()
+
+    override suspend fun replaceExternalMcpServices(servicesJson: String): String =
+        request("external_mcp_replace", buildJsonObject { put("services_json", servicesJson) }).toString()
+
+    override suspend fun reloadExternalMcpServices(): String = request("external_mcp_reload").toString()
+
     override suspend fun maintenanceState(): String = request("maintenance_state").toString()
 
     override suspend fun diagnosticsSnapshot(): String = request("diagnostics_snapshot").toString()
