@@ -28,4 +28,18 @@
     <string name="mcp_servers_remove_failed">削除に失敗しました</string>
     <string name="mcp_servers_remove">削除</string>
     <string name="key_back">戻る</string>
+
+    <string name="mcp_lan_title">LANでMCPツールを共有</string>
+    <string name="mcp_lan_description">この端末で集約したMCPツールを、信頼できるプライベートLAN上のAgentに公開します。初期状態は無効で、常にBearer認証が必要です。</string>
+    <string name="mcp_lan_status">LANリスナー：%1$s</string>
+    <string name="mcp_lan_port">LANポート</string>
+    <string name="mcp_lan_endpoint">MCPエンドポイント：%1$s</string>
+    <string name="mcp_lan_no_address">Wi-Fiに接続してLANアドレスを取得してください。</string>
+    <string name="mcp_lan_enable">LAN共有を有効化</string>
+    <string name="mcp_lan_disable">LAN共有を無効化</string>
+    <string name="mcp_lan_apply_port">ポートを適用</string>
+    <string name="mcp_lan_reveal_token">アクセストークンを表示</string>
+    <string name="mcp_lan_rotate_token">アクセストークンを再生成</string>
+    <string name="mcp_lan_private_only">プライベート/ループバックネットワークからの接続のみ許可します。ルーターでポート転送したり、インターネットに公開したりしないでください。</string>
+    <string name="mcp_lan_token">LAN Bearer Token</string>
 </resources>
