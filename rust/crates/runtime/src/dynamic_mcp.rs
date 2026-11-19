@@ -215,17 +215,37 @@ async fn send_rpc(config: &McpServerConfig, session: Option<&str>, method: &str,
     } else {
         json!({"jsonrpc":"2.0","id":1_u64,"method":method,"params":params})
     };
-    let response = timeout(REQUEST_TIMEOUT, request.json(&body).send()).await
-        .map_err(|_| RegistryError::Unavailable)?.map_err(|_| RegistryError::Unavailable)?;
-    if !response.status().is_success() { return Err(RegistryError::Upstream("upstream returned a non-success status")); }
+    let mut response = timeout(REQUEST_TIMEOUT, request.json(&body).send()).await
+        .map_err(|_| RegistryError::Unavailable)?
+        .map_err(|_| RegistryError::Unavailable)?;
+    if !response.status().is_success() {
+        return Err(RegistryError::Upstream("upstream returned a non-success status"));
+    }
     let session_id = response.headers().get("Mcp-Session-Id")
         .and_then(|value| value.to_str().ok()).map(str::to_owned);
     if method.starts_with("notifications/") {
         return Ok(RpcReply { value: json!({}), session_id });
     }
-    let bytes = response.bytes().await.map_err(|_| RegistryError::Unavailable)?;
-    if bytes.len() > MAX_RESPONSE_BYTES { return Err(RegistryError::Invalid("upstream response too large")); }
-    let value: Value = serde_json::from_slice(&bytes)
+    let is_sse = response.headers().get(CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| value.starts_with("text/event-stream"));
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response.chunk().await.map_err(|_| RegistryError::Unavailable)? {
+        if bytes.len().saturating_add(chunk.len()) > MAX_RESPONSE_BYTES {
+            return Err(RegistryError::Invalid("upstream response too large"));
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    let payload = if is_sse {
+        let text = String::from_utf8(bytes).map_err(|_| RegistryError::Upstream("upstream SSE is not UTF-8"))?;
+        let data = text.lines().filter_map(|line| line.strip_prefix("data:"))
+            .map(str::trim).filter(|line| !line.is_empty()).last()
+            .ok_or(RegistryError::Upstream("upstream SSE has no data event"))?;
+        data.to_owned()
+    } else {
+        String::from_utf8(bytes).map_err(|_| RegistryError::Upstream("upstream response is not UTF-8"))?
+    };
+    let value: Value = serde_json::from_str(&payload)
         .map_err(|_| RegistryError::Upstream("upstream returned invalid JSON"))?;
     Ok(RpcReply { value, session_id })
 }
