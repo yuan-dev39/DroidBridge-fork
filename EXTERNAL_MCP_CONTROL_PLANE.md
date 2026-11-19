@@ -21,7 +21,7 @@ the failure and preserve the last known-good registry rather than partially appl
 
 The common UI-facing API is intended to expose:
 
-- `externalMcpSettings()`: return a redacted service list, capability/version and active state.
+- `externalMcpSettings()`: return a redacted service list with name, endpoint, enabled state and token-presence metadata.
 - `replaceExternalMcpServices(servicesJson)`: validate and atomically replace the complete list.
 - `reloadExternalMcpServices()`: reconcile the running MCP facade with the committed snapshot.
 
@@ -34,7 +34,7 @@ used by `DaemonConnection`. These Root operations are implemented:
 
 - `external_mcp_settings`
 - `external_mcp_replace` with `{services_json:"[...]"}`
-- `external_mcp_reload` (implemented for the Root daemon; APK/Shizuku hosts remain pending)
+- `external_mcp_reload`
 
 The daemon validates service names, duplicate IDs, endpoint policy, service count and credential bounds. The replace response is redacted; credentials are accepted only in the replace request and are never echoed. Omitting `bearer_token` for an existing service ID preserves the saved credential; explicit `null` clears it. The committed file is stored atomically with owner-only permissions.
 
@@ -51,7 +51,7 @@ The APK host exposes the same three operations through `IDroidBridgeRuntime`; ea
 - A service's enabled flag is applied independently; disabled services are not contacted.
 - A failed discovery retains that service's last known-good tool list until a successful refresh
   or explicit deletion.
-- Reload is serialized with calls for each service so session state cannot be torn down mid-call.
+- Each service serializes its own MCP session operations; in-flight calls retain their server object while a new snapshot is applied.
 - Deletion removes the service from discovery immediately after the durable snapshot commits.
 
 ## Error contract
