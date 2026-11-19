@@ -5,6 +5,7 @@
 
 use crate::settings::{SettingsStore, TunnelSettings, valid_api_key, valid_tunnel_id};
 use runtime::{McpFacade, McpHost, McpListener, TunnelClient, TunnelRuntime};
+use runtime::dynamic_mcp::{DynamicMcpRegistry, McpServerConfig};
 use serde_json::{Value, json};
 
 const LISTENER_FAILED: &str = "MCP_LISTENER_FAILED";
@@ -20,6 +21,7 @@ pub(crate) struct DaemonIngress<H> {
     listener_failed: bool,
     tunnel: Option<(TunnelRuntime, TunnelSettings)>,
     tunnel_failed: bool,
+    dynamic_registry: DynamicMcpRegistry,
 }
 
 impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
@@ -33,6 +35,7 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
             listener_failed: false,
             tunnel: None,
             tunnel_failed: false,
+            dynamic_registry: DynamicMcpRegistry::new(),
         }
     }
 
@@ -263,7 +266,7 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
             }
             self.stop_listener();
         }
-        let started = McpFacade::new(host, self.product_version.clone())
+        let started = McpFacade::new_with_registry(host, self.product_version.clone(), self.dynamic_registry.clone())
             .and_then(|facade| McpListener::start(self.port, token.clone(), facade));
         match started {
             Ok(listener) => {
