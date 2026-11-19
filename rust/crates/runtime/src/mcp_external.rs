@@ -319,7 +319,8 @@ impl ExternalMcpServer {
         {
             Err(error) if error == "MCP_SESSION_EXPIRED" => {
                 state.session_id = None;
-                self.rpc_once(state, "initialize", initialize_params).await?
+                self.rpc_once(state, "initialize", initialize_params)
+                    .await?
             }
             result => result?,
         };
