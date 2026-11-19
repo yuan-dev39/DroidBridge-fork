@@ -218,9 +218,13 @@ async fn discover(config: &McpServerConfig) -> Result<(Vec<Value>, String, Optio
 
 async fn send_rpc(config: &McpServerConfig, session: Option<&str>, method: &str, params: Value) -> Result<RpcReply, RegistryError> {
     let url = DynamicMcpRegistry::validate_config(config)?;
-    let client = Client::builder().redirect(reqwest::redirect::Policy::none())
-        .connect_timeout(Duration::from_secs(4)).timeout(REQUEST_TIMEOUT)
-        .build().map_err(|_| RegistryError::Unavailable)?;
+    let client = Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .connect_timeout(Duration::from_secs(4))
+        .timeout(REQUEST_TIMEOUT)
+        .tls_backend_preconfigured(crate::network_tls_client_config().as_ref().clone())
+        .build()
+        .map_err(|_| RegistryError::Unavailable)?;
     let mut request = client.post(url).header(CONTENT_TYPE, "application/json")
         .header(ACCEPT, "application/json, text/event-stream");
     if let Some(token) = &config.bearer_token {
