@@ -51,6 +51,13 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
         self.stop_tunnel();
         self.host = host;
         self.reconcile();
+        if self.host.is_some() {
+            if let Ok(configs) = self.dynamic_registry.configs() {
+                for config in configs.into_iter().filter(|config| config.enabled) {
+                    let _ = self.mcp_server_refresh(&config.id);
+                }
+            }
+        }
     }
 
     /// Brings the listener and the tunnel to the committed settings.
