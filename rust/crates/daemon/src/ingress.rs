@@ -26,6 +26,12 @@ pub(crate) struct DaemonIngress<H> {
 
 impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
     pub(crate) fn new(settings: SettingsStore, port: u16) -> Self {
+        let dynamic_registry = DynamicMcpRegistry::new();
+        if let Ok(saved) = settings.mcp_servers() {
+            for config in saved {
+                let _ = dynamic_registry.upsert(config);
+            }
+        }
         Self {
             settings,
             port,
@@ -35,7 +41,7 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
             listener_failed: false,
             tunnel: None,
             tunnel_failed: false,
-            dynamic_registry: DynamicMcpRegistry::new(),
+            dynamic_registry,
         }
     }
 
@@ -268,11 +274,19 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
             id:id.to_owned(), display_name:display_name.to_owned(), endpoint:endpoint.to_owned(),
             enabled:payload.get("enabled").and_then(Value::as_bool).unwrap_or(true), bearer_token,
         };
+        if DynamicMcpRegistry::validate_config(&config).is_err() { return failure("INVALID_CONFIG"); }
+        let mut configs = match self.dynamic_registry.configs() { Ok(value) => value, Err(_) => return failure("REGISTRY_UNAVAILABLE") };
+        configs.retain(|current| current.id != config.id);
+        configs.push(config.clone());
+        if self.settings.commit_mcp_servers(&configs).is_err() { return failure("IO_ERROR"); }
         if self.dynamic_registry.upsert(config).is_err() { return failure("INVALID_CONFIG"); }
         self.mcp_server_refresh(id)
     }
 
     pub(crate) fn mcp_server_remove(&mut self, id: &str) -> Value {
+        let mut configs = match self.dynamic_registry.configs() { Ok(value) => value, Err(_) => return failure("REGISTRY_UNAVAILABLE") };
+        configs.retain(|config| config.id != id);
+        if self.settings.commit_mcp_servers(&configs).is_err() { return failure("IO_ERROR"); }
         match self.dynamic_registry.remove(id) {
             Ok(()) => self.mcp_servers_list(),
             Err(_) => failure("REGISTRY_UNAVAILABLE"),
@@ -280,6 +294,10 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
     }
 
     pub(crate) fn mcp_server_set_enabled(&mut self, id: &str, enabled: bool) -> Value {
+        let mut configs = match self.dynamic_registry.configs() { Ok(value) => value, Err(_) => return failure("REGISTRY_UNAVAILABLE") };
+        let Some(config) = configs.iter_mut().find(|config| config.id == id) else { return failure("UNKNOWN_SERVER"); };
+        config.enabled = enabled;
+        if self.settings.commit_mcp_servers(&configs).is_err() { return failure("IO_ERROR"); }
         match self.dynamic_registry.set_enabled(id, enabled) {
             Ok(()) => self.mcp_servers_list(),
             Err(_) => failure("UNKNOWN_SERVER"),
