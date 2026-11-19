@@ -267,7 +267,9 @@ impl Daemon {
             "mcp_lan_set_enabled" => flag("enabled")
                 .map(|enabled| self.ingress().mcp_lan_set_enabled(enabled))
                 .ok_or_else(invalid_payload),
-            "mcp_lan_set_port" => payload.get("port").and_then(Value::as_u64)
+            "mcp_lan_set_port" => payload
+                .get("port")
+                .and_then(Value::as_u64)
                 .and_then(|port| u16::try_from(port).ok())
                 .map(|port| self.ingress().mcp_lan_set_port(port))
                 .ok_or_else(invalid_payload),
