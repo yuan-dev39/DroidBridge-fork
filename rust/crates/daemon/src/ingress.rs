@@ -330,7 +330,11 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
             return;
         }
         self.stop_tunnel();
-        let started = McpFacade::new(host, self.product_version.clone())
+        let started = McpFacade::new_with_external_registry(
+            host,
+            self.product_version.clone(),
+            self.external_registry.clone(),
+        )
             .map_err(|_| ())
             .and_then(|facade| {
                 TunnelClient::new(
