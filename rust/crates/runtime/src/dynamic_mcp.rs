@@ -179,7 +179,7 @@ impl DynamicMcpRegistry {
     }
 
     pub async fn call(&self, published_name: &str, arguments: Value) -> Result<Value, RegistryError> {
-        let (config, upstream_name, session) = {
+        let (config, upstream_name, session, protocol_version) = {
             let entries = self.servers.read().map_err(|_| RegistryError::Unavailable)?;
             let entry = entries.values().find(|e| e.config.as_ref().is_some_and(|c| c.enabled)
                 && e.tools.iter().any(|t| t.published_name == published_name))
