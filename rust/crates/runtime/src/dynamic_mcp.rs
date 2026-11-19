@@ -3,7 +3,7 @@
 use reqwest::{Client, Url, header::{AUTHORIZATION, CONTENT_TYPE, ACCEPT, HeaderValue}};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use std::{collections::BTreeMap, net::IpAddr, sync::{Arc, RwLock}, time::Duration};
+use std::{collections::BTreeMap, sync::{Arc, RwLock}, time::Duration};
 use tokio::time::timeout;
 
 pub const MAX_SERVERS: usize = 16;
@@ -68,12 +68,9 @@ impl DynamicMcpRegistry {
         }
         let host = url.host().ok_or(RegistryError::Invalid("endpoint host is missing"))?;
         let allowed = match host {
-            reqwest::dns::Name::System(_) => false,
-            _ => match url.host_str().and_then(|s| s.parse::<IpAddr>().ok()) {
-                Some(IpAddr::V4(ip)) => ip.is_loopback() || ip.is_private() || ip.is_link_local(),
-                Some(IpAddr::V6(ip)) => ip.is_loopback() || ip.is_unique_local(),
-                None => false,
-            }
+            url::Host::Ipv4(ip) => ip.is_loopback() || ip.is_private() || ip.is_link_local(),
+            url::Host::Ipv6(ip) => ip.is_loopback() || ip.is_unique_local(),
+            url::Host::Domain(_) => false,
         };
         if !allowed { return Err(RegistryError::Invalid("only literal loopback or private IP endpoints are allowed")); }
         Ok(url)
@@ -184,10 +181,10 @@ async fn send_rpc(config: &McpServerConfig, session: Option<&str>, method: &str,
         else { json!({"jsonrpc":"2.0","id":id,"method":method,"params":params}) };
     let response = timeout(REQUEST_TIMEOUT, request.json(&body).send()).await.map_err(|_| RegistryError::Unavailable)?.map_err(|_| RegistryError::Unavailable)?;
     if !response.status().is_success() { return Err(RegistryError::Upstream("upstream returned a non-success status")); }
+    if method.starts_with("notifications/") { return Ok(json!({})); }
     let bytes = response.bytes().await.map_err(|_| RegistryError::Unavailable)?;
     if bytes.len() > MAX_RESPONSE_BYTES { return Err(RegistryError::Invalid("upstream response too large")); }
     let value: Value = serde_json::from_slice(&bytes).map_err(|_| RegistryError::Upstream("upstream returned invalid JSON"))?;
-    if method.starts_with("notifications/") { return Ok(json!({})); }
     Ok(value)
 }
 
