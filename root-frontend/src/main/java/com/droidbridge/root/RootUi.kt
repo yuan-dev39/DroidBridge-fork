@@ -3,6 +3,7 @@ package com.droidbridge.root
 import android.app.Activity
 import android.content.Intent
 import android.media.projection.MediaProjectionManager
+import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -221,7 +222,12 @@ private fun NavigationRoot(state: RootUiState, viewModel: RootViewModel, graph: 
             }
         }
     }
-    val rows = RootCapabilities.project(state.clientState, state.daemon, BuildConfig.VERSION_CODE.toLong())
+    val rows = RootCapabilities.project(
+        state.clientState,
+        state.daemon,
+        BuildConfig.VERSION_CODE.toLong(),
+        state.shizuku,
+    )
     val context = LocalContext.current
     val projectionManager = remember(context) {
         context.getSystemService(MediaProjectionManager::class.java)
@@ -245,6 +251,10 @@ private fun NavigationRoot(state: RootUiState, viewModel: RootViewModel, graph: 
     val capabilityAction: (CapabilityAction) -> Unit = { action ->
         when (action) {
             CapabilityAction.Diagnostics -> navigate(Diagnostics)
+            CapabilityAction.InstallShizuku ->
+                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://shizuku.rikka.app/download/")))
+            CapabilityAction.OpenShizuku -> viewModel.openShizukuManager()
+            CapabilityAction.Authorize -> viewModel.requestShizukuAuthorization()
             CapabilityAction.RequestLocalNetwork -> {
                 if (Build.VERSION.SDK_INT >= 37) {
                     localNetworkPermission.launch("android.permission.ACCESS_LOCAL_NETWORK")
@@ -290,7 +300,10 @@ private fun NavigationRoot(state: RootUiState, viewModel: RootViewModel, graph: 
                 val homeState by home.state.collectAsStateWithLifecycle()
                 val available = state.clientState is ClientState.Available
                 LaunchedEffect(selectedTab, available) { home.refresh() }
-                LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.recheck() }
+                LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+                    viewModel.recheck()
+                    viewModel.recheckShizuku()
+                }
                 val attention = rows.filter { it.action != null && it.state !in settledCapabilityStates }
                 // Without a snapshot nothing has been checked yet, which is not the same as all set.
                 val checking = state.clientState !is ClientState.Available ||
@@ -348,7 +361,12 @@ private fun NavigationRoot(state: RootUiState, viewModel: RootViewModel, graph: 
                 }
             }
             entry<Capabilities> {
-                CapabilitiesScreen(rows, state.clientState, viewModel::recheck, capabilityAction) {
+                CapabilitiesScreen(
+                    rows,
+                    state.clientState,
+                    { viewModel.recheck(); viewModel.recheckShizuku() },
+                    capabilityAction,
+                ) {
                     backStack.removeLastOrNull()
                 }
             }
