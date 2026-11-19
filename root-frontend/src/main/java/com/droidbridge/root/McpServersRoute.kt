@@ -51,7 +51,12 @@ fun McpServersRoute(connection: DaemonConnection, onBack: () -> Unit) {
             Button(onClick = {
                 scope.launch {
                     runCatching { connection.addMcpServer(id.trim(), displayName.trim(), endpoint.trim(), token.ifBlank { null }) }
-                        .onSuccess { snapshot = it; message = "Server added / discovery attempted"; token = "" }
+                        .onSuccess {
+                            snapshot = it
+                            val error = runCatching { Json.parseToJsonElement(it).jsonObject["error"]?.jsonPrimitive?.contentOrNull }.getOrNull()
+                            message = error?.let { code -> "Add failed: $code" } ?: "Server added / discovery attempted"
+                            token = ""
+                        }
                         .onFailure { message = it.message ?: "Add failed" }
                 }
             }) { Text("Add server") }
@@ -65,11 +70,13 @@ fun McpServersRoute(connection: DaemonConnection, onBack: () -> Unit) {
                 val url = server["endpoint"]?.jsonPrimitive?.contentOrNull.orEmpty()
                 val enabled = server["enabled"]?.jsonPrimitive?.contentOrNull == "true"
                 val count = server["tool_count"]?.jsonPrimitive?.contentOrNull ?: "0"
+                val error = server["error"]?.jsonPrimitive?.contentOrNull
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text("$name ($serverId)", style = MaterialTheme.typography.titleMedium)
                         Text(url, style = MaterialTheme.typography.bodySmall)
                         Text("Tools: $count · " + if (enabled) "Enabled" else "Disabled")
+                        if (!error.isNullOrBlank()) Text("Connection: $error", color = MaterialTheme.colorScheme.error)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(onClick = {
                                 scope.launch {
@@ -84,7 +91,7 @@ fun McpServersRoute(connection: DaemonConnection, onBack: () -> Unit) {
                                         .onSuccess { snapshot = it; message = "Discovery finished" }
                                         .onFailure { message = it.message ?: "Refresh failed" }
                                 }
-                            }) { Text("Refresh tools") }
+                            }) { Text("Test / refresh") }
                             Button(onClick = {
                                 scope.launch {
                                     runCatching { connection.removeMcpServer(serverId) }
