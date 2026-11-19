@@ -407,5 +407,5 @@
     <string name="external_mcp_disconnected">未连接</string>
     <string name="external_mcp_tools_count">发现 %1$d 个工具</string>
     <string name="external_mcp_remove">删除服务</string>
-    <string name="external_mcp_security_note">出于安全考虑，默认仅允许 localhost / 127.0.0.1 的 HTTP 地址。</string>
+    <string name="external_mcp_security_note">出于安全考虑，HTTP 仅允许 localhost 或局域网私有地址，公网 HTTP 会被拒绝；同时支持 HTTPS。</string>
 </resources>
