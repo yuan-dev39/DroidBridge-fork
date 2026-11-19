@@ -508,6 +508,26 @@ mod tests {
     }
 
     #[test]
+    fn root_backend_does_not_misreport_android_user_grants_as_unsupported() {
+        for key in [
+            "android.local_network",
+            "android.notification_listener",
+            "visual.accessibility",
+        ] {
+            let fact = initial_availability(RuntimeHost::MagiskBackend, key);
+            assert_eq!(fact.state, CapabilityState::Unknown, "{key}");
+            assert_eq!(fact.reason.as_deref(), Some("ADAPTER_NOT_READY"), "{key}");
+        }
+        let capture = initial_availability(RuntimeHost::MagiskBackend, "visual.media_projection_session");
+        assert_eq!(capture.state, CapabilityState::Unknown);
+        assert_eq!(capture.reason.as_deref(), Some("USER_CONSENT_REQUIRED"));
+
+        let shizuku = initial_availability(RuntimeHost::MagiskBackend, "shizuku.shell");
+        assert_eq!(shizuku.state, CapabilityState::Unavailable);
+        assert_eq!(shizuku.reason.as_deref(), Some("NOT_PROVIDED_BY_HOST"));
+    }
+
+    #[test]
     fn i5_g03_stale_capability_registration_cannot_replace_newer_truth() {
         let runtime = ApkRuntimeVertical::new(environment()).unwrap();
         let available = Availability {
