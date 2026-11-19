@@ -1,6 +1,6 @@
 # Dynamic MCP Registry for DroidBridge Root
 
-Status: implementation design for `feature/dynamic-mcp-registry`.
+Status: implementation in progress on `feature/dynamic-mcp-registry`. The current branch contains the shared registry, facade routing, root-daemon operations, root UI, root-only persistence, and CI jobs. Automated validation and Android artifact build remain the release gates.
 
 ## Goal
 
@@ -25,11 +25,11 @@ Keep DroidBridge's native MCP tools and the existing OpenAI Secure Tunnel unchan
    - Duplicate published names, invalid schemas, and invalid endpoints are rejected.
 
 2. **Transport**
-   - Start with Streamable HTTP MCP. Perform `initialize`, retain the negotiated protocol version and optional `Mcp-Session-Id`, send `notifications/initialized`, then use `tools/list` and `tools/call`.
+   - Streamable HTTP MCP is implemented. Perform `initialize`, retain the negotiated protocol version and optional `Mcp-Session-Id`, send `notifications/initialized`, then use paginated `tools/list` and `tools/call`. JSON and SSE responses are supported.
    - Do not follow redirects. Bound connect/overall timeouts, response bytes, tool count, and concurrent calls.
    - Never log Authorization headers or credentials.
-   - Default endpoint policy: loopback or explicitly approved private LAN IPv4 endpoints only. Reject userinfo, fragments, query credentials, non-HTTP schemes, public IPs, and DNS names until a deliberate allow-list design exists. This prevents the root daemon becoming an SSRF proxy.
-   - A failing service is isolated: native tools and other registered servers remain available.
+   - Endpoint policy: literal loopback or private/link-local IPv4, or loopback/unique-local IPv6, over HTTP only. DNS names, public IPs, HTTPS, URL userinfo, query strings and fragments are rejected. Bearer credentials are permitted only for loopback endpoints, avoiding sending them in cleartext across a LAN. This prevents the root daemon becoming an SSRF proxy.
+   - A failing service is isolated: native tools and other registered servers remain available. Stdio-only servers and remote HTTPS endpoints are not supported by the current Android HTTP client.
 
 3. **Facade integration**
    - Add external tool definitions to `tools/list` without altering native schemas.
@@ -38,14 +38,14 @@ Keep DroidBridge's native MCP tools and the existing OpenAI Secure Tunnel unchan
    - Both the local listener and OpenAI Secure Tunnel receive the same shared registry object. Adding/removing a server must not restart or recreate the tunnel.
 
 4. **Daemon control plane and persistence**
-   - Add daemon operations: `mcp_servers_list`, `mcp_server_add`, `mcp_server_remove`, `mcp_server_set_enabled`, `mcp_server_refresh`, and `mcp_server_test`.
-   - Persist service metadata and secrets only in root-only settings files (0600); redact secrets from list/status responses.
+   - Daemon operations implemented: `mcp_servers_list`, `mcp_server_add`, `mcp_server_remove`, `mcp_server_set_enabled`, and `mcp_server_refresh` (refresh also serves as the connection test).
+   - Persist service metadata and bearer credentials in `mcp-servers.json` under the daemon's root-only state directory (0600); redact secrets from list/status responses.
    - Commit configuration atomically before publishing it to the shared registry.
    - Validate endpoint and perform a discovery test before enabling a newly added service.
 
 5. **Root frontend**
    - Add a dedicated MCP Servers settings section.
-   - Support add, remove, enable/disable, refresh, test connection, and display discovered tool counts/status.
+   - Support add, remove, enable/disable, refresh/test connection, and display discovered tool counts/status.
    - Secret fields are write-only; do not populate them from daemon responses.
    - Explain that changes apply to the existing tunnel automatically.
 
@@ -76,3 +76,21 @@ Keep DroidBridge's native MCP tools and the existing OpenAI Secure Tunnel unchan
 ## Deployment gate
 
 No device files are changed until the branch has passing automated checks and a release artifact is reviewed. Before any Pad 2 deployment, back up the existing module, daemon binary, and root-only settings, then stage a reversible test deployment. The currently installed Pad 2 module and Secure Tunnel remain untouched during development.
+
+
+## Current implementation notes
+
+- Dynamic tools are named `<service_id>__<upstream_tool_name>`; service IDs reserve the double-underscore separator.
+- The root daemon owns one `DynamicMcpRegistry`; cloned handles are passed to both `McpListener` and `TunnelClient`. Registry changes are therefore visible to both without restarting the Secure Tunnel.
+- Server configurations are restored from `mcp-servers.json` when the daemon starts and refreshed when the Runtime attaches.
+- The root frontend's Agent Connections page contains a dedicated MCP Servers manager.
+- The debug Android build job packages a separate debug Magisk module, not the stable module. Device deployment is deliberately a separate, reversible step.
+- CI runs Rust formatting and workspace tests, then builds the arm64 debug Magisk module and uploads it as a workflow artifact.
+
+## Known current limitations
+
+- Only Streamable HTTP endpoints are supported; stdio process transport is not implemented.
+- Only literal private/loopback IP addresses over HTTP are accepted. Remote HTTPS is intentionally blocked until a reviewed trust-policy integration is implemented.
+- Bearer credentials are accepted only for loopback endpoints; private-LAN servers must currently be unauthenticated.
+- Resource and prompt aggregation are not implemented; this registry currently aggregates tools.
+- The Android UI currently adds a server and attempts discovery immediately; a failed discovery leaves the server registered with a redacted status error so it can be retried.
