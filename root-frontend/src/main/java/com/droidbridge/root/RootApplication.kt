@@ -1,6 +1,7 @@
 package com.droidbridge.root
 
 import android.app.Application
+import com.droidbridge.ui.common.followSystemLocale
 import com.droidbridge.ui.diagnostics.DiagnosticsExporter
 import com.droidbridge.ui.product.about.LicenseEntry
 import com.droidbridge.ui.product.about.ProductInfo
@@ -16,6 +17,7 @@ class RootApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        followSystemLocale()
         graph = AppGraph(this)
         graph.connection.start()
     }
