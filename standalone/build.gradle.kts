@@ -164,3 +164,13 @@ val copyProductInfoAssets by tasks.registering(Copy::class) {
 }
 
 tasks.named("preBuild").configure { dependsOn(copyProductInfoAssets) }
+
+
+// A clearly named installable APK artifact for the Shizuku-only edition.
+// This task is independent from Magisk module staging and can be built on its own.
+val packageShizukuDebugApk by tasks.registering(Copy::class) {
+    dependsOn("assembleDebug")
+    from(layout.buildDirectory.file("outputs/apk/debug/standalone-debug.apk"))
+    into(layout.buildDirectory.dir("outputs/distributions"))
+    rename { "DroidBridge-Shizuku-debug.apk" }
+}
