@@ -161,7 +161,11 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
                 Some(previous) => self.settings.commit_external_mcp(previous).is_ok(),
                 None => self.settings.clear_external_mcp().is_ok(),
             };
-            return failure(if rolled_back { code } else { "PERSISTENCE_FAILED" });
+            return failure(if rolled_back {
+                code
+            } else {
+                "PERSISTENCE_FAILED"
+            });
         }
         json!({"schema_version": 1, "applied": true, "service_count": incoming.len()})
     }
