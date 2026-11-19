@@ -63,7 +63,7 @@ manual locale override is introduced by this change.
 
 The authenticated Root frontend socket now exposes:
 
-- `external_mcp_settings`: returns service names and `has_bearer_token`; never returns endpoints or credentials.
+- `external_mcp_settings`: returns service names, endpoint, enabled state and `has_bearer_token`; never returns bearer credentials.
 - `external_mcp_replace` with a `services_json` string containing the complete JSON array shown above. The daemon validates first, commits an owner-only atomic settings file, then applies the snapshot.
 - `external_mcp_reload`: reloads the last committed snapshot without restarting the listener.
 
