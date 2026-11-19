@@ -599,7 +599,7 @@ fn local_lan_ip() -> Option<String> {
     socket.connect(("192.0.2.1", 9)).ok()?;
     let address = socket.local_addr().ok()?.ip();
     match address {
-        std::net::IpAddr::V4(ip) if !ip.is_unspecified() && !ip.is_loopback() => Some(ip.to_string()),
+        std::net::IpAddr::V4(ip) if ip.is_private() || ip.is_link_local() => Some(ip.to_string()),
         _ => None,
     }
 }
