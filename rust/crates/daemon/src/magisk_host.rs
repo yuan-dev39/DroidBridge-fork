@@ -1279,9 +1279,8 @@ fn package_permission(package: &str, permission: &str) -> Option<bool> {
         return None;
     }
     let needle = format!("{permission}: granted=");
-    let line = String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .find(|line| line.contains(&needle))?;
+    let output_text = String::from_utf8_lossy(&output.stdout);
+    let line = output_text.lines().find(|line| line.contains(&needle))?;
     if line.contains("granted=true") {
         Some(true)
     } else if line.contains("granted=false") {
