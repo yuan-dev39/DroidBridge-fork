@@ -39,7 +39,7 @@ jobs:
           "ANDROID_SDK_ROOT=$sdkRoot" | Out-File -FilePath $env:GITHUB_ENV -Append
           1..100 | ForEach-Object { "y" } | & $sdkManager.FullName --licenses
           if ($LASTEXITCODE -ne 0) { throw "Android SDK license acceptance failed" }
-          & $sdkManager.FullName --install "platforms;android-36" "build-tools;36.0.0" "ndk;29.0.14206865"
+          & $sdkManager.FullName --install "platforms;android-36" "platforms;android-37.0" "build-tools;36.0.0" "build-tools;37.0.0" "ndk;29.0.14206865"
           if ($LASTEXITCODE -ne 0) { throw "Android SDK package installation failed" }
 
       - uses: dtolnay/rust-toolchain@stable
@@ -57,15 +57,29 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      - name: Prepare Android 37 platform path for AGP
+        shell: pwsh
+        run: |
+          # Android publishes API 37 as android-37.0, while AGP resolves compileSdk 37
+          # through the canonical android-37 directory. A junction preserves the original
+          # platform files and satisfies AGP without modifying project compileSdk settings.
+          $platforms = Join-Path $env:ANDROID_SDK_ROOT "platforms"
+          $platform37 = Join-Path $platforms "android-37.0"
+          $canonical37 = Join-Path $platforms "android-37"
+          if (!(Test-Path (Join-Path $platform37 "android.jar"))) {
+            throw "Android 37.0 platform was not installed correctly"
+          }
+          if (!(Test-Path $canonical37)) {
+            New-Item -ItemType Junction -Path $canonical37 -Target $platform37 | Out-Null
+          }
+          if (!(Test-Path (Join-Path $canonical37 "android.jar"))) {
+            throw "Android 37 canonical platform path is not usable"
+          }
+
       - name: Build standalone Shizuku APK and Root debug module
         shell: pwsh
         run: |
-          # Android 37 is not yet published in the runner SDK repository. Compile the
-          # device-test artifacts against API 36; release builds use API 37 when available.
-          (Get-Content ui-common/build.gradle.kts) -replace 'compileSdk = 37', 'compileSdk = 36' | Set-Content ui-common/build.gradle.kts
-          (Get-Content root-frontend/build.gradle.kts) -replace 'compileSdk = 37', 'compileSdk = 36' | Set-Content root-frontend/build.gradle.kts
-          (Get-Content standalone/build.gradle.kts) -replace 'compileSdk = 37', 'compileSdk = 36' | Set-Content standalone/build.gradle.kts
-          ./gradlew.bat --no-daemon --dependency-verification=off :standalone:assembleDebug :root-frontend:assembleDebugMagiskModule
+          ./gradlew.bat --no-daemon --dependency-verification=off :standalone:testDebugUnitTest :standalone:assembleDebug :root-frontend:assembleDebugMagiskModule
 
       - name: Verify package outputs
         shell: pwsh
