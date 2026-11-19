@@ -83,6 +83,7 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
                 let name = item.get("name")?.as_str()?;
                 Some(json!({
                     "name": name,
+                    "endpoint": item.get("endpoint").and_then(Value::as_str).unwrap_or(""),
                     "enabled": item.get("enabled").and_then(Value::as_bool).unwrap_or(true),
                     "has_bearer_token": item.get("bearer_token").and_then(Value::as_str).is_some_and(|v| !v.is_empty())
                 }))
