@@ -37,7 +37,7 @@ class MediaProjectionSessionService : Service() {
         createNotificationChannel()
         val notification = Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(applicationInfo.icon)
-            .setContentTitle(getString(com.droidbridge.ui.R.string.app_name))
+            .setContentTitle(getString(R.string.app_name))
             .setContentText("Screen capture session is active")
             .setOngoing(true)
             .build()
