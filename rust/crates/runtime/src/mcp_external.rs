@@ -270,3 +270,52 @@ pub(crate) fn is_external_tool(name: &str) -> bool {
 pub(crate) fn original_tool_name(name: &str) -> &str {
     name.strip_prefix(TOOL_PREFIX).unwrap_or(name)
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn external_tools_are_namespaced_without_mutating_original_definitions() {
+        let original = json!({
+            "name": "shell",
+            "description": "Run a shell command",
+            "inputSchema": {"type": "object", "properties": {"command": {"type": "string"}}}
+        });
+        let namespaced = namespace_tools(std::slice::from_ref(&original));
+        assert_eq!(namespaced.len(), 1);
+        assert_eq!(namespaced[0]["name"], "mt__shell");
+        assert_eq!(namespaced[0]["inputSchema"]["properties"]["command"]["type"], "string");
+        assert_eq!(original["name"], "shell");
+    }
+
+    #[test]
+    fn tools_without_an_object_schema_receive_a_safe_empty_schema() {
+        let tool = json!({"name": "status", "description": "Status"});
+        let namespaced = namespace_tools(&[tool]);
+        assert_eq!(namespaced[0]["name"], "mt__status");
+        assert_eq!(namespaced[0]["inputSchema"]["type"], "object");
+    }
+
+    #[test]
+    fn malformed_remote_tool_definitions_are_ignored() {
+        let tools = vec![
+            json!({"description": "missing name"}),
+            json!({"name": "", "inputSchema": {"type": "object"}}),
+            json!({"name": "valid", "inputSchema": {"type": "object"}}),
+        ];
+        let namespaced = namespace_tools(&tools);
+        assert_eq!(namespaced.len(), 1);
+        assert_eq!(namespaced[0]["name"], "mt__valid");
+    }
+
+    #[test]
+    fn only_the_external_namespace_is_dispatched_remotely() {
+        assert!(is_external_tool("mt__shell"));
+        assert!(!is_external_tool("shell"));
+        assert!(!is_external_tool("mt__"));
+        assert_eq!(original_tool_name("mt__shell"), "shell");
+        assert_eq!(original_tool_name("filesystem"), "filesystem");
+    }
+}
