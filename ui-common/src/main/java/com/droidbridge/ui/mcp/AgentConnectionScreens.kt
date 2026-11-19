@@ -37,6 +37,7 @@ fun AgentConnectionRoute(
     viewModel: McpViewModel,
     openMcp: () -> Unit,
     openTunnel: () -> Unit,
+    openExternalMcp: () -> Unit,
     back: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -72,6 +73,7 @@ fun AgentConnectionRoute(
             }
             item { WayRow(R.string.home_mcp, R.drawable.ic_lan, mcpLabel, "agent:local_mcp", openMcp) }
             item { WayRow(R.string.mcp_chatgpt_connection, R.drawable.ic_cloud, tunnelLabel, "agent:chatgpt", openTunnel) }
+            item { WayRow(R.string.agent_external_mcp, R.drawable.ic_lan, null, "agent:external_mcp", openExternalMcp) }
         }
     }
     LaunchedEffect(Unit) { viewModel.refresh() }
