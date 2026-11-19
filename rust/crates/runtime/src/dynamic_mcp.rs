@@ -366,4 +366,95 @@ mod tests {
         assert_eq!(registry.list_servers().unwrap()[0]["enabled"], false);
         assert!(registry.list_tools().unwrap().is_empty());
     }
+
+    fn read_mock_request(stream: &std::net::TcpStream) -> (String, Value) {
+        use std::io::{BufRead, BufReader, Read};
+        let mut reader = BufReader::new(stream.try_clone().unwrap());
+        let mut headers = String::new();
+        let mut line = String::new();
+        reader.read_line(&mut line).unwrap();
+        headers.push_str(&line);
+        let mut length = 0_usize;
+        loop {
+            line.clear();
+            reader.read_line(&mut line).unwrap();
+            if line == "\\r\\n" || line.is_empty() { break; }
+            if let Some((name, value)) = line.split_once(':') {
+                if name.eq_ignore_ascii_case("content-length") {
+                    length = value.trim().parse().unwrap();
+                }
+            }
+            headers.push_str(&line);
+        }
+        let mut body = vec![0_u8; length];
+        reader.read_exact(&mut body).unwrap();
+        (headers, serde_json::from_slice(&body).unwrap())
+    }
+
+    fn write_mock_response(stream: &mut std::net::TcpStream, status: &str, headers: &str, body: &Value) {
+        use std::io::Write;
+        let body = serde_json::to_vec(body).unwrap();
+        write!(stream, "HTTP/1.1 {status}\\r\\n{headers}Content-Type: application/json\\r\\nContent-Length: {}\\r\\nConnection: close\\r\\n\\r\\n", body.len()).unwrap();
+        stream.write_all(&body).unwrap();
+    }
+
+    #[test]
+    fn discovers_and_calls_a_streamable_http_server_with_its_session() {
+        use std::{io::Write, net::TcpListener, thread};
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = thread::spawn(move || {
+            for step in 0..4 {
+                let (mut stream, _) = listener.accept().unwrap();
+                let (headers, request) = read_mock_request(&stream);
+                let method = request["method"].as_str().unwrap();
+                match (step, method) {
+                    (0, "initialize") => {
+                        write_mock_response(&mut stream, "200 OK", "Mcp-Session-Id: session-test\\r\\n", &json!({
+                            "jsonrpc":"2.0","id":request["id"],
+                            "result":{"protocolVersion":"2025-03-26","capabilities":{"tools":{}}}
+                        }));
+                    }
+                    (1, "notifications/initialized") => {
+                        assert!(headers.contains("Mcp-Session-Id: session-test"));
+                        stream.write_all(b"HTTP/1.1 202 Accepted\\r\\nContent-Length: 0\\r\\nConnection: close\\r\\n\\r\\n").unwrap();
+                    }
+                    (2, "tools/list") => {
+                        assert!(headers.contains("Mcp-Session-Id: session-test"));
+                        assert!(headers.contains("MCP-Protocol-Version: 2025-03-26"));
+                        write_mock_response(&mut stream, "200 OK", "Mcp-Session-Id: session-test\\r\\n", &json!({
+                            "jsonrpc":"2.0","id":request["id"],"result":{"tools":[{
+                                "name":"echo","description":"Echo input",
+                                "inputSchema":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"]}
+                            }]}
+                        }));
+                    }
+                    (3, "tools/call") => {
+                        assert!(headers.contains("Mcp-Session-Id: session-test"));
+                        assert_eq!(request["params"]["name"], "echo");
+                        assert_eq!(request["params"]["arguments"]["text"], "hello");
+                        write_mock_response(&mut stream, "200 OK", "Mcp-Session-Id: session-test\\r\\n", &json!({
+                            "jsonrpc":"2.0","id":request["id"],"result":{
+                                "content":[{"type":"text","text":"hello"}],
+                                "structuredContent":{"echo":"hello"}
+                            }
+                        }));
+                    }
+                    other => panic!("unexpected mock MCP exchange: {other:?}"),
+                }
+            }
+        });
+
+        let registry = DynamicMcpRegistry::new();
+        registry.upsert(config(&format!("http://127.0.0.1:{port}/mcp"))).unwrap();
+        let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+        runtime.block_on(async {
+            assert_eq!(registry.refresh("mt-manager").await.unwrap(), 1);
+            let tools = registry.list_tools().unwrap();
+            assert_eq!(tools[0].published_name, "mt-manager__echo");
+            let result = registry.call("mt-manager__echo", json!({"text":"hello"})).await.unwrap();
+            assert_eq!(result["structuredContent"]["echo"], "hello");
+        });
+        server.join().unwrap();
+    }
 }
