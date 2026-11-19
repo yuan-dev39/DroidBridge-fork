@@ -86,8 +86,8 @@ No device files are changed until the branch has passing automated checks and a 
 - The root daemon owns one `DynamicMcpRegistry`; cloned handles are passed to both `McpListener` and `TunnelClient`. Registry changes are therefore visible to both without restarting the Secure Tunnel.
 - Server configurations are restored from `mcp-servers.json` when the daemon starts and refreshed when the Runtime attaches.
 - The root frontend's Agent Connections page contains a dedicated MCP Servers manager.
-- The debug Android build job packages a separate debug Magisk module, not the stable module. Device deployment is deliberately a separate, reversible step.
-- CI runs Rust formatting and workspace tests, then builds the arm64 debug Magisk module and uploads it as a workflow artifact.
+- The debug Android build job first builds the pinned libpcap 1.10.6 static library for Android arm64 using `tools/build-libpcap.sh`, then packages a separate debug Magisk module, not the stable module. Device deployment is deliberately a separate, reversible step.
+- CI runs Rust formatting and workspace tests, installs the pinned Android SDK/NDK/CMake toolchain, verifies/builds the pinned libpcap dependency, then builds the arm64 debug Magisk module and uploads it as a workflow artifact.
 
 ## Known current limitations
 
