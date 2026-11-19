@@ -410,5 +410,5 @@
     <string name="external_mcp_disconnected">Disconnected</string>
     <string name="external_mcp_tools_count">%1$d tools discovered</string>
     <string name="external_mcp_remove">Remove service</string>
-    <string name="external_mcp_security_note">For security, only localhost / 127.0.0.1 HTTP endpoints are allowed by default.</string>
+    <string name="external_mcp_security_note">For security, HTTP is limited to localhost or private LAN addresses; public HTTP is blocked. HTTPS is also supported.</string>
 </resources>
