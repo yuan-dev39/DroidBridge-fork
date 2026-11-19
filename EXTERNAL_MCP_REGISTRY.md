@@ -6,7 +6,7 @@ DroidBridge tool names and Contract dispatch are unchanged.
 
 ## Temporary debug configuration
 
-The Runtime reads `DROIDBRIDGE_EXTERNAL_MCP_SERVICES` when its MCP facade is created. Its value
+The Runtime retains `DROIDBRIDGE_EXTERNAL_MCP_SERVICES` as a debug fallback. The Root daemon now owns a persisted service snapshot and can replace or reload it at runtime. Its initial JSON shape
 is a JSON array:
 
 ```json
@@ -58,8 +58,16 @@ base resource set, Simplified Chinese is in `values-zh-rCN`, and Japanese is in 
 Android resource resolution follows the device/app system locale; no extra language selector or
 manual locale override is introduced by this change.
 
+## Root daemon control operations
+
+The authenticated Root frontend socket now exposes:
+
+- `external_mcp_settings`: returns service names and `has_bearer_token`; never returns endpoints or credentials.
+- `external_mcp_replace` with a `services_json` string containing the complete JSON array shown above. The daemon validates first, commits an owner-only atomic settings file, then applies the snapshot.
+- `external_mcp_reload`: reloads the last committed snapshot without restarting the listener.
+
+The registry handle is shared by the Root MCP listener and tunnel facade. Replacing an unchanged service reuses its client, MCP session, cache and request-id sequence; removed services stop being advertised and routable. The Root daemon stores the bearer values only in its root-owned settings file with mode 0600. The replace operation returns only an applied flag and service count.
+
 ## Remaining work before release
 
-The environment-variable format is only a debug integration seam. A user-facing service manager,
-secure credential persistence, live configuration reload, reconnect controls, build/test validation
-and real-device verification are still required. Do not ship this branch as a stable release yet.
+A user-facing service manager and RuntimeConnection UI, APK AIDL/Keystore integration, Shizuku host integration, build/test validation and real-device verification are still required. Do not ship this branch as a stable release yet.
