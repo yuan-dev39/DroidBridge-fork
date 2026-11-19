@@ -241,9 +241,10 @@ fn outcome(cause: CommandProcessCause, exit_code: Option<i32>) -> CommandProcess
     }
 }
 
-fn exited(exit_code: i32) -> CommandProcessSettlement {
+fn exited(run_as: RunAs, exit_code: i32) -> CommandProcessSettlement {
     CommandProcessSettlement {
         outcome: outcome(CommandProcessCause::Exited, Some(exit_code)),
+        actual_run_as: Some(run_as),
         cleanup_verified: true,
     }
 }
@@ -412,13 +413,14 @@ async fn i8_cmd_g01_both_host_surfaces_share_one_public_result_and_error_semanti
     let magisk = magisk_facts(MAGISK_INSTANCE);
 
     let scripted_cases = [
-        (RunAs::App, exited(0)),
-        (RunAs::Shell, exited(0)),
-        (RunAs::App, exited(7)),
+        (RunAs::App, exited(RunAs::App, 0)),
+        (RunAs::Shell, exited(RunAs::Shell, 0)),
+        (RunAs::App, exited(RunAs::App, 7)),
         (
             RunAs::Shell,
             CommandProcessSettlement {
                 outcome: outcome(CommandProcessCause::Timeout, None),
+                actual_run_as: Some(RunAs::Shell),
                 cleanup_verified: true,
             },
         ),
@@ -502,6 +504,7 @@ async fn i8_cmd_g01_both_host_surfaces_share_one_public_result_and_error_semanti
         for cause in unverified_causes {
             let unverified = CommandProcessSettlement {
                 outcome: outcome(cause, (cause == CommandProcessCause::Exited).then_some(0)),
+                actual_run_as: Some(run_as),
                 cleanup_verified: false,
             };
             let apk_port = ScriptedPort::new();
@@ -526,6 +529,7 @@ async fn i8_cmd_g01_both_host_surfaces_share_one_public_result_and_error_semanti
         // same cancellation and carry the same cleanup uncertainty with it.
         let unverified = CommandProcessSettlement {
             outcome: outcome(CommandProcessCause::Cancelled, None),
+            actual_run_as: Some(run_as),
             cleanup_verified: false,
         };
         let apk_port = ScriptedPort::new();
@@ -920,6 +924,7 @@ async fn i8_cmd_g04_retained_output_has_one_artifact_owner_beyond_the_inline_bou
                     stderr: long_stderr.clone(),
                     stderr_truncated: true,
                 },
+                actual_run_as: Some(native_identity(facts)),
                 cleanup_verified: true,
             }),
         );
@@ -971,6 +976,7 @@ async fn i8_cmd_g04_retained_output_has_one_artifact_owner_beyond_the_inline_bou
                 stderr: b"err".to_vec(),
                 stderr_truncated: true,
             },
+            actual_run_as: Some(RunAs::Shell),
             cleanup_verified: true,
         };
         let encoded = AndroidCommandSettlement::encode(&settlement).unwrap();
