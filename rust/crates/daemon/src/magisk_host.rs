@@ -63,6 +63,9 @@ pub(crate) struct MagiskHost {
     helper_port: HelperPort,
     family_probes: [bool; 3],
     family_probed_at: Instant,
+    frontend_package: String,
+    android_grant_generation: SourceGeneration,
+    android_grants_probed_at: Instant,
     guard_ready: bool,
     module_ready: bool,
     wake_alarm_ready: bool,
@@ -333,6 +336,14 @@ impl MagiskHost {
                 capability_generation.current(),
             )?;
         }
+        let frontend_package = identity.frontend_package.to_owned();
+        let android_grant_generation = SourceGeneration::initial();
+        publish_android_grants(
+            &vertical,
+            &frontend_package,
+            sdk_int,
+            android_grant_generation.current(),
+        )?;
         if !guard_ready {
             vertical.set_unavailable("CLEANUP_UNVERIFIED")?;
         }
@@ -499,6 +510,9 @@ impl MagiskHost {
             helper_port,
             family_probes,
             family_probed_at: Instant::now(),
+            frontend_package,
+            android_grant_generation,
+            android_grants_probed_at: Instant::now(),
             guard_ready,
             module_ready: true,
             wake_alarm_ready,
@@ -564,6 +578,16 @@ impl MagiskHost {
         sdk_int: u32,
         observed_module_ready: bool,
     ) -> Result<(), DomainError> {
+        if self.android_grants_probed_at.elapsed() >= Duration::from_secs(5) {
+            self.android_grants_probed_at = Instant::now();
+            let generation = self.android_grant_generation.advance()?;
+            publish_android_grants(
+                &self.vertical,
+                &self.frontend_package,
+                sdk_int,
+                generation,
+            )?;
+        }
         let scheduler_faulted = match self.automation_fault.lock() {
             Ok(fault) => fault.is_some(),
             Err(poisoned) => poisoned.into_inner().is_some(),
@@ -1147,6 +1171,124 @@ impl HostControlPort for MagiskHostControl {
             eprintln!("droidbridged: cannot restore readiness: {:?}", failed.code);
         }
     }
+}
+
+fn publish_android_grants(
+    vertical: &ApkRuntimeVertical,
+    package: &str,
+    sdk_int: u32,
+    generation: u64,
+) -> Result<(), DomainError> {
+    let local_network = TcpListener::bind(("0.0.0.0", 0)).is_ok();
+    register(
+        vertical,
+        "android.local_network",
+        capability_state(local_network),
+        (!local_network).then_some("LOCAL_NETWORK_BIND_FAILED"),
+        false,
+        generation,
+    )?;
+
+    let notification_listener = secure_setting_contains("enabled_notification_listeners", package);
+    register_probe_fact(
+        vertical,
+        "android.notification_listener",
+        notification_listener,
+        "USER_NOT_GRANTED",
+        generation,
+    )?;
+
+    let notifications = if sdk_int >= 33 {
+        package_permission(package, "android.permission.POST_NOTIFICATIONS")
+    } else {
+        Some(true)
+    };
+    register_probe_fact(
+        vertical,
+        "android.notifications",
+        notifications,
+        "USER_NOT_GRANTED",
+        generation,
+    )?;
+
+    let accessibility = secure_setting_contains("enabled_accessibility_services", package);
+    register_probe_fact(
+        vertical,
+        "visual.accessibility",
+        accessibility,
+        "USER_NOT_GRANTED",
+        generation,
+    )?;
+
+    let projection = media_projection_active(package);
+    register_probe_fact(
+        vertical,
+        "visual.media_projection_session",
+        projection,
+        "USER_CONSENT_REQUIRED",
+        generation,
+    )?;
+    Ok(())
+}
+
+fn register_probe_fact(
+    vertical: &ApkRuntimeVertical,
+    key: &str,
+    fact: Option<bool>,
+    denied_reason: &'static str,
+    generation: u64,
+) -> Result<(), DomainError> {
+    let (state, reason) = match fact {
+        Some(true) => (CapabilityState::Available, None),
+        Some(false) => (CapabilityState::Unavailable, Some(denied_reason)),
+        None => (CapabilityState::Unknown, Some("PROBE_FAILED")),
+    };
+    register(vertical, key, state, reason, false, generation)
+}
+
+fn secure_setting_contains(name: &str, package: &str) -> Option<bool> {
+    let output = Command::new("/system/bin/settings")
+        .args(["get", "secure", name])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let value = String::from_utf8_lossy(&output.stdout);
+    Some(value.split(':').any(|component| {
+        component.trim().starts_with(&format!("{package}/"))
+    }))
+}
+
+fn package_permission(package: &str, permission: &str) -> Option<bool> {
+    let output = Command::new("/system/bin/cmd")
+        .args(["package", "check-permission", permission, package, "0"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    match String::from_utf8_lossy(&output.stdout).trim() {
+        "granted" => Some(true),
+        "denied" => Some(false),
+        _ => None,
+    }
+}
+
+fn media_projection_active(package: &str) -> Option<bool> {
+    let output = Command::new("/system/bin/dumpsys")
+        .arg("media_projection")
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let state = String::from_utf8_lossy(&output.stdout);
+    let active = state
+        .split("History")
+        .next()
+        .unwrap_or(&state);
+    Some(active.contains(package))
 }
 
 fn register(
