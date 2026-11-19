@@ -1,7 +1,6 @@
 # External MCP control-plane contract
 
-Status: partially implemented. The Root Magisk daemon now persists, redacts, replaces and reloads
-external MCP service snapshots. APK AIDL and Shizuku host integration remain design-only.
+Status: Root and APK control planes are implemented in source. Root uses its owner-only daemon settings file; APK Runtime uses an AES-GCM encrypted file with an Android Keystore key. Neither path has completed CI/device validation yet.
 
 ## Ownership
 
@@ -41,9 +40,7 @@ The daemon validates service names, duplicate IDs, endpoint policy, service coun
 
 ## APK AIDL operations
 
-Pending: the APK host must expose the same three operations through `IDroidBridgeRuntime`. The service
-must authenticate the Binder caller using its existing `verifyCaller()` guard before forwarding
-to the RuntimeHostController. The UI must not use a second, less-restricted Binder service.
+The APK host exposes the same three operations through `IDroidBridgeRuntime`; each Binder method calls the existing `verifyCaller()` guard. `DroidBridgeClient` implements the shared `RuntimeConnection` methods. The native APK MCP listener and its JNI setter share one `ExternalMcpRegistry` handle. The Runtime process restores its encrypted snapshot before the service starts the listener.
 
 ## Registry behavior
 
