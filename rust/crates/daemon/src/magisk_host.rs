@@ -1179,12 +1179,16 @@ fn publish_android_grants(
     sdk_int: u32,
     generation: u64,
 ) -> Result<(), DomainError> {
-    let local_network = TcpListener::bind(("0.0.0.0", 0)).is_ok();
+    let local_network = if sdk_int >= 37 {
+        package_permission(package, "android.permission.ACCESS_LOCAL_NETWORK")
+    } else {
+        Some(TcpListener::bind(("0.0.0.0", 0)).is_ok())
+    };
     register(
         vertical,
         "android.local_network",
-        capability_state(local_network),
-        (!local_network).then_some("LOCAL_NETWORK_BIND_FAILED"),
+        local_network.map_or(CapabilityState::Unknown, capability_state),
+        if local_network == Some(false) { Some("LOCAL_NETWORK_PERMISSION_REQUIRED") } else if local_network.is_none() { Some("PROBE_FAILED") } else { None },
         false,
         generation,
     )?;
