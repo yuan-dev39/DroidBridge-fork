@@ -13,7 +13,7 @@ class ExternalMcpRegistryContractTest {
     fun acceptsNativeRegistryShapeAndOmitsEmptyCredentials() {
         val services = listOf(
             ExternalMcpServiceConfig("mt", "http://127.0.0.1:8787/mcp"),
-            ExternalMcpServiceConfig("cloud-1", "https://mcp.example.com/mcp", "secret"),
+            ExternalMcpServiceConfig("cloud-1", "https://mcp.example.com/mcp", bearerToken = "secret"),
         )
         assertNull(ExternalMcpRegistryContract.validate(services))
         val json = ExternalMcpRegistryContract.toNativeConfig(services).toString()
@@ -57,7 +57,7 @@ class ExternalMcpRegistryContractTest {
     @Test
     fun safeSummaryNeverContainsBearerToken() {
         val summary = ExternalMcpRegistryContract.safeSummary(
-            ExternalMcpServiceConfig("mt", "http://127.0.0.1:8787/mcp", "top-secret"),
+            ExternalMcpServiceConfig("mt", "http://127.0.0.1:8787/mcp", bearerToken = "top-secret"),
         ).toString()
         assertTrue(summary.contains("has_bearer_token"))
         assertFalse(summary.contains("top-secret"))
