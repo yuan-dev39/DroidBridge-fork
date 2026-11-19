@@ -388,7 +388,9 @@ fn valid_service_name(name: &str) -> bool {
     !name.is_empty()
         && name.len() <= 24
         && !name.contains("__")
-        && name.bytes().all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_' || byte == b'-')
+        && name.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_' || byte == b'-'
+        })
 }
 
 fn safe_endpoint(raw: &str) -> Option<Url> {
@@ -410,7 +412,9 @@ fn safe_endpoint(raw: &str) -> Option<Url> {
     } else if let Ok(ip) = host.parse::<IpAddr>() {
         match ip {
             IpAddr::V4(ip) => ip.is_loopback() || ip.is_private() || ip.is_link_local(),
-            IpAddr::V6(ip) => ip.is_loopback() || ip.is_unique_local() || ip.is_unicast_link_local(),
+            IpAddr::V6(ip) => {
+                ip.is_loopback() || ip.is_unique_local() || ip.is_unicast_link_local()
+            }
         }
     } else {
         false
@@ -421,33 +425,43 @@ fn safe_endpoint(raw: &str) -> Option<Url> {
 fn valid_remote_tool_name(name: &str) -> bool {
     !name.is_empty()
         && name.len() <= MAX_REMOTE_TOOL_NAME_BYTES
-        && name.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
 }
 
 fn namespace_tools(service: &str, tools: &[Value]) -> Vec<Value> {
-    tools.iter().filter_map(|tool| {
-        let name = tool.get("name")?.as_str()?;
-        if !valid_remote_tool_name(name) || name.contains("__") {
-            return None;
-        }
-        let mut tool = tool.clone();
-        let object = tool.as_object_mut()?;
-        object.insert("name".to_owned(), Value::String(format!("{service}__{name}")));
-        if !object.get("inputSchema").is_some_and(Value::is_object) {
-            object.insert("inputSchema".to_owned(), json!({
-                "type": "object",
-                "properties": {},
-                "additionalProperties": true
-            }));
-        }
-        Some(tool)
-    }).collect()
+    tools
+        .iter()
+        .filter_map(|tool| {
+            let name = tool.get("name")?.as_str()?;
+            if !valid_remote_tool_name(name) || name.contains("__") {
+                return None;
+            }
+            let mut tool = tool.clone();
+            let object = tool.as_object_mut()?;
+            object.insert(
+                "name".to_owned(),
+                Value::String(format!("{service}__{name}")),
+            );
+            if !object.get("inputSchema").is_some_and(Value::is_object) {
+                object.insert(
+                    "inputSchema".to_owned(),
+                    json!({
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": true
+                    }),
+                );
+            }
+            Some(tool)
+        })
+        .collect()
 }
 
 pub(crate) fn is_external_tool(name: &str) -> bool {
-    name.split_once("__").is_some_and(|(service, tool)| {
-        valid_service_name(service) && !tool.is_empty()
-    })
+    name.split_once("__")
+        .is_some_and(|(service, tool)| valid_service_name(service) && !tool.is_empty())
 }
 
 #[cfg(test)]
@@ -463,7 +477,10 @@ mod tests {
         });
         let namespaced = namespace_tools("mt", std::slice::from_ref(&original));
         assert_eq!(namespaced[0]["name"], "mt__shell");
-        assert_eq!(namespaced[0]["inputSchema"]["properties"]["command"]["type"], "string");
+        assert_eq!(
+            namespaced[0]["inputSchema"]["properties"]["command"]["type"],
+            "string"
+        );
         assert_eq!(original["name"], "shell");
     }
 
@@ -542,7 +559,10 @@ mod tests {
             {"name":"mt","endpoint":"http://127.0.0.1:8787/mcp"},
             {"name":"mt","endpoint":"http://127.0.0.1:8788/mcp"}
         ]"#;
-        assert_eq!(registry.replace_json(duplicate), Err("DUPLICATE_SERVICE_NAME"));
+        assert_eq!(
+            registry.replace_json(duplicate),
+            Err("DUPLICATE_SERVICE_NAME")
+        );
         let public_http = r#"[{"name":"public","endpoint":"http://example.com/mcp"}]"#;
         assert_eq!(registry.replace_json(public_http), Err("INVALID_CONFIG"));
     }
