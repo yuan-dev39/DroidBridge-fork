@@ -3,7 +3,7 @@
 use reqwest::{Client, Url, header::{AUTHORIZATION, CONTENT_TYPE, ACCEPT, HeaderValue}};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use std::{collections::BTreeMap, sync::{Arc, RwLock}, time::Duration};
+use std::{collections::BTreeMap, net::IpAddr, sync::{Arc, RwLock}, time::Duration};
 use tokio::time::timeout;
 
 pub const MAX_SERVERS: usize = 16;
@@ -66,11 +66,10 @@ impl DynamicMcpRegistry {
             || url.query().is_some() || url.fragment().is_some() {
             return Err(RegistryError::Invalid("endpoint must be plain HTTP without userinfo, query or fragment"));
         }
-        let host = url.host().ok_or(RegistryError::Invalid("endpoint host is missing"))?;
-        let allowed = match host {
-            url::Host::Ipv4(ip) => ip.is_loopback() || ip.is_private() || ip.is_link_local(),
-            url::Host::Ipv6(ip) => ip.is_loopback() || ip.is_unique_local(),
-            url::Host::Domain(_) => false,
+        let allowed = match url.host_str().and_then(|host| host.parse::<IpAddr>().ok()) {
+            Some(IpAddr::V4(ip)) => ip.is_loopback() || ip.is_private() || ip.is_link_local(),
+            Some(IpAddr::V6(ip)) => ip.is_loopback() || ip.is_unique_local(),
+            None => false,
         };
         if !allowed { return Err(RegistryError::Invalid("only literal loopback or private IP endpoints are allowed")); }
         Ok(url)
