@@ -155,6 +155,14 @@ impl SettingsStore {
         write_settings(&self.base, EXTERNAL_MCP_FILE, &value)
     }
 
+    pub(crate) fn clear_external_mcp(&self) -> Result<(), DomainError> {
+        match fs::remove_file(self.base.join(EXTERNAL_MCP_FILE)) {
+            Ok(()) => sync_directory(&self.base),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(DomainError::os(ErrorCode::IoError, "cannot remove external MCP settings", &error)),
+        }
+    }
+
     pub(crate) fn clear_tunnel(&self) -> Result<(), DomainError> {
         match fs::remove_file(self.base.join(TUNNEL_FILE)) {
             Ok(()) => sync_directory(&self.base),
