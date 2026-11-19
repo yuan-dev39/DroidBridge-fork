@@ -70,7 +70,10 @@ jobs:
             "platforms;android-36" \
             "build-tools;36.0.0" \
             "ndk;29.0.14206865"
-          sdkmanager --channel=3 --install "platforms;android-37"
+          sdkmanager --install "platforms;android-37.0"
+          # SDK Manager publishes API 37 under android-37.0, while this project's
+          # AGP and framework helper task resolve the canonical android-37 path.
+          ln -sfn android-37.0 "$ANDROID_HOME/platforms/android-37"
       - uses: dtolnay/rust-toolchain@1.98.0
         with:
           targets: aarch64-linux-android
