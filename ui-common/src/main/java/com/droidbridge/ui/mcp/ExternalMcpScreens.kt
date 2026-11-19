@@ -12,6 +12,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -225,6 +226,9 @@ private fun ExternalMcpEditor(
     var token by remember { mutableStateOf("") }
     var enabled by remember(initial?.enabled) { mutableStateOf(initial?.enabled ?: true) }
     var clearToken by remember { mutableStateOf(false) }
+    val normalizedName = name.trim()
+    val canSave = !saving && normalizedName.isNotBlank() && endpoint.isNotBlank() &&
+        (!hasSavedToken || normalizedName == initial?.name || token.isNotBlank() || clearToken)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(if (initial == null) R.string.external_mcp_add else R.string.external_mcp_edit)) },
@@ -242,6 +246,7 @@ private fun ExternalMcpEditor(
                     label = { Text(stringResource(R.string.external_mcp_bearer_token)) },
                     supportingText = { Text(stringResource(if (hasSavedToken) R.string.external_mcp_token_keep_hint else R.string.external_mcp_token_hint)) },
                     singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
                 )
                 if (hasSavedToken) {
                     androidx.compose.foundation.layout.Row {
@@ -257,7 +262,7 @@ private fun ExternalMcpEditor(
         },
         confirmButton = {
             TextButton(
-                enabled = !saving && name.isNotBlank() && endpoint.isNotBlank(),
+                enabled = canSave,
                 onClick = {
                     onSave(ExternalMcpServiceConfig(name.trim(), endpoint.trim(), enabled), token, clearToken)
                 },
