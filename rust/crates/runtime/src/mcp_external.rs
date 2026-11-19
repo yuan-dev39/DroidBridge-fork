@@ -305,6 +305,7 @@ impl ExternalMcpServer {
 fn valid_service_name(name: &str) -> bool {
     !name.is_empty()
         && name.len() <= 24
+        && !name.contains("__")
         && name.bytes().all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_' || byte == b'-')
 }
 
