@@ -90,6 +90,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Compile standalone APK Kotlin and AIDL
         run: |
+          SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          test -n "$SDK_ROOT"
           test -f "$SDK_ROOT/platforms/android-37.0/android.jar"
           ln -sfn android-37.0 "$SDK_ROOT/platforms/android-37"
           test -f "$SDK_ROOT/platforms/android-37/android.jar"
