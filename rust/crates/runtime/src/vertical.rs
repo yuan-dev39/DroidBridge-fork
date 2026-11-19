@@ -476,11 +476,14 @@ fn initial_availability(host: RuntimeHost, key: &str) -> Availability {
     } else {
         Availability {
             state: CapabilityState::Unknown,
-            reason: Some(if key == "visual.media_projection_session" {
-                "USER_CONSENT_REQUIRED"
-            } else {
-                "ADAPTER_NOT_READY"
-            }.to_owned()),
+            reason: Some(
+                if key == "visual.media_projection_session" {
+                    "USER_CONSENT_REQUIRED"
+                } else {
+                    "ADAPTER_NOT_READY"
+                }
+                .to_owned(),
+            ),
         }
     }
 }
@@ -518,7 +521,10 @@ mod tests {
             assert_eq!(fact.state, CapabilityState::Unknown, "{key}");
             assert_eq!(fact.reason.as_deref(), Some("ADAPTER_NOT_READY"), "{key}");
         }
-        let capture = initial_availability(RuntimeHost::MagiskBackend, "visual.media_projection_session");
+        let capture = initial_availability(
+            RuntimeHost::MagiskBackend,
+            "visual.media_projection_session",
+        );
         assert_eq!(capture.state, CapabilityState::Unknown);
         assert_eq!(capture.reason.as_deref(), Some("USER_CONSENT_REQUIRED"));
 
