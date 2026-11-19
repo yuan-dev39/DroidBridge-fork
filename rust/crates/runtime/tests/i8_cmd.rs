@@ -585,7 +585,7 @@ async fn i8_cmd_g01_both_host_surfaces_share_one_public_result_and_error_semanti
         ErrorCode::InvalidArgument
     );
     let probing = ScriptedPort::new();
-    probing.script(RunAs::App, Ok(exited(0)));
+    probing.script(RunAs::App, Ok(exited(RunAs::App, 0)));
     let apk_surface = surface(apk_capabilities(), &APK_IDENTITIES, probing.clone());
     let failure = start(&apk_surface, admitted(apk, &invalid, 5))
         .await
@@ -596,7 +596,7 @@ async fn i8_cmd_g01_both_host_surfaces_share_one_public_result_and_error_semanti
 
     // `as_task=true` keeps the complete R-CMD-006 result inside the Task terminal shape.
     let port = ScriptedPort::new();
-    port.script(RunAs::App, Ok(exited(3)));
+    port.script(RunAs::App, Ok(exited(RunAs::App, 3)));
     let task_call = run_call(RunAs::App, true);
     let apk_surface = surface(apk_capabilities(), &APK_IDENTITIES, port);
     let mut execution = admitted(apk, &task_call, 6);
@@ -646,7 +646,7 @@ async fn i8_cmd_g02_requested_and_actual_identity_are_exact_on_each_surface() {
             provider_generation(facts, provider)
         );
         let port = ScriptedPort::new();
-        port.script(run_as, Ok(exited(0)));
+        port.script(run_as, Ok(exited(run_as, 0)));
         let runner = surface(capabilities_of(facts), identities_of(facts), port.clone());
         let result = public_result(&start(&runner, execution).await.unwrap()).clone();
         assert_eq!(result["requested_run_as"], identity);
@@ -668,7 +668,7 @@ async fn i8_cmd_g02_requested_and_actual_identity_are_exact_on_each_surface() {
     // `root` is unavailable on the APK surface, and it is refused rather than falling
     // through to another identity.
     let apk_port = ScriptedPort::new();
-    apk_port.script(RunAs::Root, Ok(exited(0)));
+    apk_port.script(RunAs::Root, Ok(exited(RunAs::Root, 0)));
     let root_call = run_call(RunAs::Root, false);
     assert_eq!(
         command_executor_request(&capability(apk), &root_call)
@@ -715,8 +715,8 @@ async fn i8_cmd_g02_requested_and_actual_identity_are_exact_on_each_surface() {
     ];
     for (facts, call, provider, instance) in mismatches {
         let port = ScriptedPort::new();
-        port.script(call_run_as(&call), Ok(exited(0)));
-        port.script(RunAs::Root, Ok(exited(0)));
+        port.script(call_run_as(&call), Ok(exited(call_run_as(&call), 0)));
+        port.script(RunAs::Root, Ok(exited(RunAs::Root, 0)));
         let runner = surface(capabilities_of(facts), identities_of(facts), port.clone());
         let execution = mismatched(facts, &call, provider, instance);
         let failure = start(&runner, execution).await.unwrap_err();
@@ -794,7 +794,7 @@ async fn i8_cmd_g03_shizuku_is_only_the_apk_surfaces_shell_primitive_provider() 
     for (facts, call, provider, instance) in wrong_identities {
         let port = ScriptedPort::new();
         port.script(RunAs::Root, Ok(exited(0)));
-        port.script(RunAs::Shell, Ok(exited(0)));
+        port.script(RunAs::Shell, Ok(exited(RunAs::Shell, 0)));
         let runner = surface(capabilities_of(facts), identities_of(facts), port.clone());
         let execution = mismatched(facts, &call, provider, instance);
         let failure = start(&runner, execution).await.unwrap_err();
