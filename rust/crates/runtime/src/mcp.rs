@@ -423,11 +423,27 @@ impl<H: McpHost> McpFacade<H> {
                 "MCP product version is empty",
             ));
         }
+        Self::new_with_external_registry(host, product_version, ExternalMcpRegistry::from_environment())
+    }
+
+    /// Builds a facade using a daemon-owned registry handle that can be hot-reloaded without
+    /// restarting the listener or discarding unchanged remote MCP sessions.
+    pub fn new_with_external_registry(
+        host: H,
+        product_version: String,
+        external: ExternalMcpRegistry,
+    ) -> Result<Self, DomainError> {
+        if product_version.is_empty() {
+            return Err(DomainError::new(
+                ErrorCode::InvalidArgument,
+                "MCP product version is empty",
+            ));
+        }
         Ok(Self {
             host,
             product_version,
             tools: tool_definitions()?,
-            external: ExternalMcpRegistry::new(),
+            external,
         })
     }
 
