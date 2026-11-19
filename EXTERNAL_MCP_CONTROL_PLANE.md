@@ -23,11 +23,10 @@ the failure and preserve the last known-good registry rather than partially appl
 The common UI-facing API is intended to expose:
 
 - `externalMcpSettings()`: return a redacted service list, capability/version and active state.
-- `replaceExternalMcpServices(services)`: validate and atomically replace the complete list.
+- `replaceExternalMcpServices(servicesJson)`: validate and atomically replace the complete list.
 - `reloadExternalMcpServices()`: reconcile the running MCP facade with the committed snapshot.
 
-The settings response must never contain bearer-token values. It may include
-`has_bearer_token` for each service.
+The settings response must never contain bearer-token values. It may include the non-secret endpoint, enabled state and `has_bearer_token` for each service.
 
 ## Root frontend wire operations
 
