@@ -118,10 +118,15 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
         if let Some(previous_raw) = previous.as_deref() {
             if let Ok(previous_services) = serde_json::from_str::<Vec<Value>>(previous_raw) {
                 for service in &mut incoming {
-                    let Some(name) = service.get("name").and_then(Value::as_str) else { continue };
-                    let has_credential_field = service.as_object().is_some_and(|object| object.contains_key("bearer_token"));
+                    let Some(name) = service.get("name").and_then(Value::as_str) else {
+                        continue;
+                    };
+                    let has_credential_field = service
+                        .as_object()
+                        .is_some_and(|object| object.contains_key("bearer_token"));
                     if !has_credential_field {
-                        if let Some(token) = previous_services.iter()
+                        if let Some(token) = previous_services
+                            .iter()
                             .find(|old| old.get("name").and_then(Value::as_str) == Some(name))
                             .and_then(|old| old.get("bearer_token"))
                             .filter(|token| !token.is_null())
@@ -140,8 +145,12 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
             Err(_) => return failure("INVALID_CONFIG"),
         };
         let probe = ExternalMcpRegistry::from_environment();
-        if let Err(code) = probe.replace_json(&effective_raw) { return failure(code); }
-        if self.settings.commit_external_mcp(&effective_raw).is_err() { return failure("PERSISTENCE_FAILED"); }
+        if let Err(code) = probe.replace_json(&effective_raw) {
+            return failure(code);
+        }
+        if self.settings.commit_external_mcp(&effective_raw).is_err() {
+            return failure("PERSISTENCE_FAILED");
+        }
         if let Err(code) = self.external_registry.replace_json(&effective_raw) {
             if let Some(previous) = previous {
                 let _ = self.settings.commit_external_mcp(&previous);
@@ -365,8 +374,12 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
             }
             self.stop_listener();
         }
-        let started = McpFacade::new_with_external_registry(host, self.product_version.clone(), self.external_registry.clone())
-            .and_then(|facade| McpListener::start(self.port, token.clone(), facade));
+        let started = McpFacade::new_with_external_registry(
+            host,
+            self.product_version.clone(),
+            self.external_registry.clone(),
+        )
+        .and_then(|facade| McpListener::start(self.port, token.clone(), facade));
         match started {
             Ok(listener) => {
                 self.listener = Some((listener, token));
@@ -394,17 +407,17 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
             self.product_version.clone(),
             self.external_registry.clone(),
         )
+        .map_err(|_| ())
+        .and_then(|facade| {
+            TunnelClient::new(
+                facade,
+                &settings.tunnel_id,
+                &settings.api_key,
+                &self.product_version,
+            )
             .map_err(|_| ())
-            .and_then(|facade| {
-                TunnelClient::new(
-                    facade,
-                    &settings.tunnel_id,
-                    &settings.api_key,
-                    &self.product_version,
-                )
-                .map_err(|_| ())
-            })
-            .and_then(|client| TunnelRuntime::start(client).map_err(|_| ()));
+        })
+        .and_then(|client| TunnelRuntime::start(client).map_err(|_| ()));
         match started {
             Ok(tunnel) => self.tunnel = Some((tunnel, settings)),
             Err(()) => self.tunnel_failed = true,
