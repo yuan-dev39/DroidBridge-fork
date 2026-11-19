@@ -152,6 +152,7 @@
     <string name="external_mcp_title">External MCP servers</string>
     <string name="external_mcp_add">Add server</string>
     <string name="external_mcp_edit">Edit server</string>
+    <string name="external_mcp_name_hint">Use 1–24 lowercase letters, numbers, underscores or hyphens. The ID prefixes this server’s tools.</string>
     <string name="external_mcp_name">Service ID</string>
     <string name="external_mcp_endpoint">MCP endpoint</string>
     <string name="external_mcp_endpoint_hint">Use http:// for localhost or private LAN only; use https:// for public servers. Path must be /mcp.</string>
