@@ -36,6 +36,7 @@ internal class ShizukuController(
         override val generation: Long,
         override val remote: IShizukuUserService,
         override val token: Binder,
+        val effectiveUid: Int,
         override val lost: CompletableDeferred<Unit> = CompletableDeferred(),
         var guardState: RegisteredCapabilityState = RegisteredCapabilityState.Unknown,
         var guardReason: String? = "CONNECTING",
@@ -207,7 +208,7 @@ internal class ShizukuController(
         if (current != null) {
             if (cleanupQuarantined) {
                 publish(
-                    observation.copy(userServiceUid = SHELL_UID),
+                    observation.copy(userServiceUid = current.effectiveUid),
                     null,
                     RegisteredCapabilityState.Unavailable,
                     "CLEANUP_UNVERIFIED",
@@ -299,7 +300,7 @@ internal class ShizukuController(
             loseConnection(generation)
             return
         }
-        if (uid != SHELL_UID) {
+        if (!ShizukuLaunchPolicy.isSupportedUid(uid)) {
             val remove = synchronized(this) {
                 if (!isCurrentConnection(generation, connection)) {
                     false
@@ -347,10 +348,10 @@ internal class ShizukuController(
             if (!isCurrentConnection(generation, connection)) {
                 false
             } else {
-                val next = Session(generation, remote, token)
+                val next = Session(generation, remote, token, uid)
                 session = next
                 publish(
-                    observe(connecting = false).copy(userServiceUid = SHELL_UID),
+                    observe(connecting = false).copy(userServiceUid = uid),
                     bridge(next).takeUnless { cleanupQuarantined },
                     if (cleanupQuarantined) {
                         RegisteredCapabilityState.Unavailable
@@ -422,7 +423,10 @@ internal class ShizukuController(
                 AndroidPrimitive.ShizukuBind -> {
                     require(request.descriptors.isEmpty())
                     AndroidExecutionResult(
-                        JSONObject().put("uid", SHELL_UID).toString().toByteArray(),
+                        JSONObject()
+                            .put("uid", candidate.effectiveUid)
+                            .put("privilege_mode", ShizukuLaunchPolicy.privilegeMode(candidate.effectiveUid))
+                            .toString().toByteArray(),
                     )
                 }
                 AndroidPrimitive.ShizukuProcessStart -> processExecutor.start(candidate, request)
@@ -584,7 +588,7 @@ internal class ShizukuController(
         managerInstalled = managerInstalled(),
         binderAlive = binderAlive(),
         authorized = authorized(),
-        userServiceUid = session?.let { SHELL_UID } ?: incompatibleUid,
+        userServiceUid = session?.effectiveUid ?: incompatibleUid,
         connecting = connecting,
         cleanupQuarantined = cleanupQuarantined,
         plusInstalled = ShizukuManagers.plusInstalled(application),
@@ -615,7 +619,6 @@ internal class ShizukuController(
         private const val PERMISSION_REQUEST_CODE = 7_041
         private const val USER_SERVICE_TAG = "droidbridge-shizuku-v1"
         private const val USER_SERVICE_VERSION = BuildConfig.VERSION_CODE
-        private const val SHELL_UID = 2_000
         private val BINDER_RELAY_INSTALLED = AtomicBoolean(false)
         private val SOURCE_GENERATION = java.util.concurrent.atomic.AtomicLong(
             SystemClock.elapsedRealtimeNanos(),
