@@ -1232,7 +1232,6 @@ where
     let (request, target, pinned) = match input {
         VisualInteractInput::Tap { target, .. } => interaction_target(
             observations,
-            execution,
             current,
             envelope.admitted_at_ms,
             target,
@@ -1240,7 +1239,7 @@ where
         )?,
         VisualInteractInput::LongPress { target, .. } => interaction_target(
             observations,
-            execution,
+            current,
             envelope.admitted_at_ms,
             target,
             "long_press",
@@ -1391,7 +1390,6 @@ where
 
 fn interaction_target(
     observations: &Arc<Mutex<VisualObservationCache>>,
-    execution: &AdmittedExecution,
     current: &CapabilitySnapshot,
     now_ms: u64,
     target: &PointTarget,
