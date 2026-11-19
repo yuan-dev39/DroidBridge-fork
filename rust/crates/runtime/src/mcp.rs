@@ -11,6 +11,7 @@ use contract::{ErrorCode, PublicPayload, RequestId};
 use domain::DomainError;
 use serde_json::{Map, Value, json};
 use std::{collections::BTreeSet, io::Read};
+use crate::dynamic_mcp::DynamicMcpRegistry;
 
 pub const MCP_PROTOCOL_VERSION: &str = "2026-07-28";
 /// The initialization-based revisions the same endpoint also serves, newest first (a dual-era
@@ -410,6 +411,7 @@ pub struct McpFacade<H> {
     host: H,
     product_version: String,
     tools: Value,
+    dynamic: DynamicMcpRegistry,
 }
 
 impl<H: McpHost> McpFacade<H> {
@@ -422,11 +424,19 @@ impl<H: McpHost> McpFacade<H> {
                 "MCP product version is empty",
             ));
         }
-        Ok(Self {
-            host,
-            product_version,
-            tools: tool_definitions()?,
-        })
+        Self::new_with_registry(host, product_version, DynamicMcpRegistry::new())
+    }
+
+    /// Builds a facade sharing the daemon-owned dynamic registry across listener and tunnel.
+    pub fn new_with_registry(
+        host: H,
+        product_version: String,
+        dynamic: DynamicMcpRegistry,
+    ) -> Result<Self, DomainError> {
+        if product_version.is_empty() {
+            return Err(DomainError::new(ErrorCode::InvalidArgument, "MCP product version is empty"));
+        }
+        Ok(Self { host, product_version, tools: tool_definitions()?, dynamic })
     }
 
     /// Handles one HTTP request against the token currently committed by the settings owner.
@@ -650,12 +660,29 @@ impl<H: McpHost> McpFacade<H> {
         if !shaped || !only_keys(params, &["name", "arguments", "_meta"]) {
             return invalid_params(id, field_detail("params", expected));
         }
-        let Some(name) = params["name"]
-            .as_str()
-            .filter(|name| MCP_TOOL_NAMES.contains(name))
-        else {
-            return invalid_params(id, field_detail("params.name", "not an advertised tool"));
+        let Some(name) = params["name"].as_str() else {
+            return invalid_params(id, field_detail("params.name", "expected a tool name"));
         };
+        if name.contains("__") {
+            let Some(arguments) = params["arguments"].as_object() else {
+                return invalid_params(id, field_detail("params.arguments", "expected an object"));
+            };
+            let arguments = arguments.get("arguments").cloned().unwrap_or_else(|| Value::Object(arguments.clone()));
+            let response = match self.dynamic.call(name, arguments).await {
+                Ok(result) => rpc_result(id, json!({
+                    "resultType":"complete",
+                    "content": result.get("content").cloned().unwrap_or_else(|| json!([])),
+                    "structuredContent": result.get("structuredContent").cloned().unwrap_or(result.clone()),
+                    "isError": result.get("isError").and_then(Value::as_bool).unwrap_or(false),
+                    "_meta": self.server_meta(),
+                })),
+                Err(_) => self.tool_failure(id, name, ErrorCode::CapabilityUnavailable, "the registered MCP server could not complete this tool call"),
+            };
+            return response;
+        }
+        if !MCP_TOOL_NAMES.contains(&name) {
+            return invalid_params(id, field_detail("params.name", "not an advertised tool"));
+        }
         let Some(arguments) = params["arguments"]
             .as_object()
             .filter(|arguments| only_keys(arguments, &["action", "input"]))
