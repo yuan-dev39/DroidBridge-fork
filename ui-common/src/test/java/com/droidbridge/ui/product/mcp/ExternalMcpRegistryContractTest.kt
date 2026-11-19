@@ -55,6 +55,15 @@ class ExternalMcpRegistryContractTest {
     }
 
     @Test
+    fun omitsUnchangedCredentialAndCanExplicitlyClearIt() {
+        val service = ExternalMcpServiceConfig("mt", "http://127.0.0.1:8787/mcp")
+        val keep = ExternalMcpRegistryContract.toNativeConfig(listOf(service)).toString()
+        assertFalse(keep.contains("bearer_token"))
+        val clear = ExternalMcpRegistryContract.toNativeConfig(listOf(service), setOf("mt")).toString()
+        assertTrue(clear.contains("\"bearer_token\":null"))
+    }
+
+    @Test
     fun safeSummaryNeverContainsBearerToken() {
         val summary = ExternalMcpRegistryContract.safeSummary(
             ExternalMcpServiceConfig("mt", "http://127.0.0.1:8787/mcp", bearerToken = "top-secret"),
