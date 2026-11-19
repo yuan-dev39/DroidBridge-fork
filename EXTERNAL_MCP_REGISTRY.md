@@ -32,6 +32,7 @@ is a JSON array:
 Fields:
 - `name`: unique lowercase service id (letters, digits, underscore and hyphen; up to 24 chars).
 - `endpoint`: Streamable HTTP MCP endpoint. The path must be exactly `/mcp`.
+- `enabled`: optional boolean, defaults to `true`; disabled services are not contacted or advertised.
 - `bearer_token`: optional Bearer token. It is never added to tool descriptions or tool results.
 
 When the JSON variable is absent, the old single-server variables remain supported:
