@@ -86,10 +86,12 @@ class ExternalMcpViewModel(private val connection: RuntimeConnection) : ViewMode
     fun save(
         services: List<ExternalMcpServiceConfig>,
         clearBearerTokenNames: Set<String> = emptySet(),
+        onComplete: ((Boolean) -> Unit)? = null,
     ) {
         val error = ExternalMcpRegistryContract.validate(services)
         if (error != null) {
-            mutableState.update { it.copy(failed = true) }
+            mutableState.update { it.copy(failed = true, saving = false) }
+            onComplete?.invoke(false)
             return
         }
         mutableState.update { it.copy(saving = true, failed = false) }
@@ -101,6 +103,7 @@ class ExternalMcpViewModel(private val connection: RuntimeConnection) : ViewMode
             }.getOrDefault(false)
             mutableState.update { it.copy(saving = false, failed = !saved) }
             if (saved) refresh()
+            onComplete?.invoke(saved)
         }
     }
 
@@ -184,13 +187,20 @@ fun ExternalMcpRoute(viewModel: ExternalMcpViewModel, back: () -> Unit) {
             initial = original?.config,
             hasSavedToken = original?.hasBearerToken == true,
             saving = state.saving,
+            showError = state.failed,
             onDismiss = { adding = false; editing = null },
             onSave = { config, token, clearToken ->
                 val next = state.services.map { it.config }.filterNot { it.name == original?.config?.name }.toMutableList()
                 next += config.copy(bearerToken = token.takeIf { it.isNotBlank() })
-                viewModel.save(next, if (clearToken && token.isBlank()) setOf(config.name) else emptySet())
-                adding = false
-                editing = null
+                viewModel.save(
+                    next,
+                    if (clearToken && token.isBlank()) setOf(config.name) else emptySet(),
+                ) { saved ->
+                    if (saved) {
+                        adding = false
+                        editing = null
+                    }
+                }
             },
         )
     }
@@ -215,6 +225,7 @@ private fun ExternalMcpEditor(
     initial: ExternalMcpServiceConfig?,
     hasSavedToken: Boolean,
     saving: Boolean,
+    showError: Boolean,
     onDismiss: () -> Unit,
     onSave: (ExternalMcpServiceConfig, String, Boolean) -> Unit,
 ) {
@@ -247,6 +258,9 @@ private fun ExternalMcpEditor(
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
                 )
+                if (showError) {
+                    Text(stringResource(R.string.external_mcp_error))
+                }
                 if (hasSavedToken) {
                     androidx.compose.foundation.layout.Row {
                         Checkbox(checked = clearToken, onCheckedChange = { clearToken = it })
