@@ -246,6 +246,57 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
         status
     }
 
+    pub(crate) fn mcp_servers_list(&self) -> Value {
+        match self.dynamic_registry.list_servers() {
+            Ok(servers) => json!({"schema_version":1,"servers":servers}),
+            Err(_) => failure("REGISTRY_UNAVAILABLE"),
+        }
+    }
+
+    pub(crate) fn mcp_server_add(&mut self, payload: &Value) -> Value {
+        let (Some(id), Some(display_name), Some(endpoint)) = (
+            payload.get("id").and_then(Value::as_str),
+            payload.get("display_name").and_then(Value::as_str),
+            payload.get("endpoint").and_then(Value::as_str),
+        ) else { return failure("INVALID_CONFIG"); };
+        let bearer_token = match payload.get("bearer_token") {
+            None | Some(Value::Null) => None,
+            Some(Value::String(value)) => Some(value.clone()),
+            _ => return failure("INVALID_CONFIG"),
+        };
+        let config = McpServerConfig {
+            id:id.to_owned(), display_name:display_name.to_owned(), endpoint:endpoint.to_owned(),
+            enabled:payload.get("enabled").and_then(Value::as_bool).unwrap_or(true), bearer_token,
+        };
+        if self.dynamic_registry.upsert(config).is_err() { return failure("INVALID_CONFIG"); }
+        self.mcp_server_refresh(id)
+    }
+
+    pub(crate) fn mcp_server_remove(&mut self, id: &str) -> Value {
+        match self.dynamic_registry.remove(id) {
+            Ok(()) => self.mcp_servers_list(),
+            Err(_) => failure("REGISTRY_UNAVAILABLE"),
+        }
+    }
+
+    pub(crate) fn mcp_server_set_enabled(&mut self, id: &str, enabled: bool) -> Value {
+        match self.dynamic_registry.set_enabled(id, enabled) {
+            Ok(()) => self.mcp_servers_list(),
+            Err(_) => failure("UNKNOWN_SERVER"),
+        }
+    }
+
+    pub(crate) fn mcp_server_refresh(&mut self, id: &str) -> Value {
+        let registry = self.dynamic_registry.clone();
+        let result = tokio::runtime::Builder::new_current_thread().enable_all().build()
+            .map_err(|_| ())
+            .and_then(|runtime| runtime.block_on(registry.refresh(id)).map_err(|_| ()));
+        match result {
+            Ok(count) => json!({"schema_version":1,"refreshed":true,"tool_count":count,"servers":self.mcp_servers_list()["servers"]}),
+            Err(()) => json!({"schema_version":1,"refreshed":false,"error":"UPSTREAM_UNAVAILABLE","servers":self.mcp_servers_list()["servers"]}),
+        }
+    }
+
     fn reconcile_listener(&mut self, token: Option<String>) {
         let (Some(token), Some(host)) = (token, self.host.clone()) else {
             self.stop_listener();
