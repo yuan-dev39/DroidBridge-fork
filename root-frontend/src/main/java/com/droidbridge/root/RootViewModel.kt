@@ -2,6 +2,9 @@ package com.droidbridge.root
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.droidbridge.ui.client.CapabilityRow
+import com.droidbridge.ui.client.CapabilityRowKey
+import com.droidbridge.ui.client.CapabilityRowState
 import com.droidbridge.ui.client.ClientState
 import com.droidbridge.ui.product.maintenance.MaintenanceReplies
 import com.droidbridge.ui.product.maintenance.MaintenanceState
@@ -21,11 +24,13 @@ data class RootUiState(
     /** The S-UI-017 maintenance facts; MaintenanceRecovery is the root while a blocker exists. */
     val maintenance: MaintenanceState? = null,
     val daemon: DaemonStatus? = null,
+    val shizuku: CapabilityRow = CapabilityRow(CapabilityRowKey.Shizuku, CapabilityRowState.Unknown),
 )
 
 class RootViewModel(
     private val settings: AppSettings,
     private val connection: DaemonConnection,
+    private val shizukuBackend: ShizukuBackendController,
 ) : ViewModel() {
     private val maintenance = MutableStateFlow<MaintenanceState?>(null)
 
@@ -34,7 +39,8 @@ class RootViewModel(
         connection.state,
         maintenance,
         connection.daemon,
-    ) { theme, client, maintenance, daemon -> RootUiState(theme, client, maintenance, daemon) }
+        shizukuBackend.row,
+    ) { theme, client, maintenance, daemon, shizuku -> RootUiState(theme, client, maintenance, daemon, shizuku) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RootUiState())
 
     init {
@@ -46,6 +52,12 @@ class RootViewModel(
     }
 
     fun recheck() = connection.recheck()
+
+    fun recheckShizuku() = shizukuBackend.recheck()
+
+    fun requestShizukuAuthorization(): Boolean = shizukuBackend.requestAuthorization()
+
+    fun openShizukuManager(): Boolean = shizukuBackend.openManager()
 
     fun setTheme(theme: ThemePreference) {
         // A preference the device cannot store stays as it was; it never ends the App.
