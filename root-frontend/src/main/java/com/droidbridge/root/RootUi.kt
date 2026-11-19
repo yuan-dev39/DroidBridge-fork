@@ -1,5 +1,12 @@
 package com.droidbridge.root
 
+import android.app.Activity
+import android.content.Intent
+import android.media.projection.MediaProjectionManager
+import android.os.Build
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
@@ -34,11 +41,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
@@ -213,9 +222,46 @@ private fun NavigationRoot(state: RootUiState, viewModel: RootViewModel, graph: 
         }
     }
     val rows = RootCapabilities.project(state.clientState, state.daemon, BuildConfig.VERSION_CODE.toLong())
+    val context = LocalContext.current
+    val projectionManager = remember(context) {
+        context.getSystemService(MediaProjectionManager::class.java)
+    }
+    val localNetworkPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { viewModel.recheck() }
+    val projectionPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        val data = result.data
+        if (result.resultCode == Activity.RESULT_OK && data != null) {
+            runCatching {
+                context.startForegroundService(
+                    MediaProjectionSessionService.createStartIntent(context, result.resultCode, data),
+                )
+            }
+        }
+        viewModel.recheck()
+    }
     val capabilityAction: (CapabilityAction) -> Unit = { action ->
         when (action) {
             CapabilityAction.Diagnostics -> navigate(Diagnostics)
+            CapabilityAction.RequestLocalNetwork -> {
+                if (Build.VERSION.SDK_INT >= 37) {
+                    localNetworkPermission.launch("android.permission.ACCESS_LOCAL_NETWORK")
+                } else {
+                    viewModel.recheck()
+                }
+            }
+            CapabilityAction.OpenNotificationAccessSettings ->
+                context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+            CapabilityAction.OpenAccessibilitySettings ->
+                context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            CapabilityAction.StartCapture ->
+                projectionPermission.launch(projectionManager.createScreenCaptureIntent())
+            CapabilityAction.StopCapture -> {
+                context.stopService(Intent(context, MediaProjectionSessionService::class.java))
+                viewModel.recheck()
+            }
             else -> viewModel.recheck()
         }
     }
