@@ -74,7 +74,7 @@ internal object ShizukuCapabilityProjector {
             !observation.authorized -> ShizukuProviderState.NotAuthorized
             observation.userServiceFailed -> ShizukuProviderState.NotRunning
             observation.connecting || observation.userServiceUid == null -> ShizukuProviderState.Connecting
-            ShizukuLaunchPolicy.isSupportedUid(observation.userServiceUid) -> ShizukuProviderState.Connected
+            observation.userServiceUid?.let(ShizukuLaunchPolicy::isSupportedUid) == true -> ShizukuProviderState.Connected
             else -> ShizukuProviderState.IncompatibleIdentity
         }
         val registrationState = when (providerState) {
