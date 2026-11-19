@@ -456,7 +456,7 @@ internal class ShizukuController(
         if (reason == "CLEANUP_UNVERIFIED") cleanupQuarantined = true
         if (cleanupQuarantined) {
             publish(
-                observe(connecting = false).copy(userServiceUid = SHELL_UID),
+                observe(connecting = false).copy(userServiceUid = current.effectiveUid),
                 null,
                 guardState,
                 reason,
@@ -475,7 +475,7 @@ internal class ShizukuController(
         current.guardReason = "CLEANUP_UNVERIFIED"
         current.probeInFlight = false
         publish(
-            observe(connecting = false).copy(userServiceUid = SHELL_UID),
+            observe(connecting = false).copy(userServiceUid = current.effectiveUid),
             bridge(current),
             RegisteredCapabilityState.Unavailable,
             "CLEANUP_UNVERIFIED",
