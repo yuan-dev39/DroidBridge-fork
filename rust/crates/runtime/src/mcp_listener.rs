@@ -95,7 +95,12 @@ impl McpListener {
             tokio::net::TcpListener::from_std(listener).map_err(|_| listener_failed())?
         };
         let token = Arc::new(RwLock::new(token));
-        runtime.spawn(accept_loop(listener, Arc::new(facade), Arc::clone(&token), lan_only));
+        runtime.spawn(accept_loop(
+            listener,
+            Arc::new(facade),
+            Arc::clone(&token),
+            lan_only,
+        ));
         Ok(Self { runtime, token })
     }
 
@@ -155,25 +160,21 @@ async fn accept_loop<H: McpHost + 'static>(
     }
 }
 
-
 /// LAN exposure is deliberately limited to local/private networks. Public peers are dropped
 /// before HTTP parsing, while the normal bearer-token check remains mandatory for accepted peers.
 fn is_private_lan_peer(address: std::net::IpAddr) -> bool {
     match address {
         std::net::IpAddr::V4(ip) => {
-            ip.is_loopback()
-                || ip.is_private()
-                || ip.is_link_local()
-                || ip.is_unspecified()
+            ip.is_loopback() || ip.is_private() || ip.is_link_local() || ip.is_unspecified()
         }
         std::net::IpAddr::V6(ip) => {
             ip.is_loopback()
                 || ip.is_unique_local()
                 || ip.is_unicast_link_local()
                 || ip.is_unspecified()
-                || ip.to_ipv4_mapped().is_some_and(|v4| {
-                    v4.is_loopback() || v4.is_private() || v4.is_link_local()
-                })
+                || ip
+                    .to_ipv4_mapped()
+                    .is_some_and(|v4| v4.is_loopback() || v4.is_private() || v4.is_link_local())
         }
     }
 }
@@ -277,10 +278,22 @@ mod tests {
             "fc00::1",
             "fe80::1",
         ] {
-            assert!(is_private_lan_peer(address.parse::<IpAddr>().unwrap()), "{address}");
+            assert!(
+                is_private_lan_peer(address.parse::<IpAddr>().unwrap()),
+                "{address}"
+            );
         }
-        for address in ["8.8.8.8", "1.1.1.1", "172.15.255.1", "192.0.2.10", "2001:4860:4860::8888"] {
-            assert!(!is_private_lan_peer(address.parse::<IpAddr>().unwrap()), "{address}");
+        for address in [
+            "8.8.8.8",
+            "1.1.1.1",
+            "172.15.255.1",
+            "192.0.2.10",
+            "2001:4860:4860::8888",
+        ] {
+            assert!(
+                !is_private_lan_peer(address.parse::<IpAddr>().unwrap()),
+                "{address}"
+            );
         }
     }
 
