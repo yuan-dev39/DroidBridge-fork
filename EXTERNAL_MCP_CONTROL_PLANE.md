@@ -1,7 +1,7 @@
 # External MCP control-plane contract
 
-Status: design contract for the next implementation slice. This document does not claim that the
-operations below are implemented by either Runtime host yet.
+Status: partially implemented. The Root Magisk daemon now persists, redacts, replaces and reloads
+external MCP service snapshots. APK AIDL and Shizuku host integration remain design-only.
 
 ## Ownership
 
@@ -32,18 +32,17 @@ The settings response must never contain bearer-token values. It may include
 ## Root frontend wire operations
 
 The Root frontend and daemon communicate over the authenticated Unix socket protocol already
-used by `DaemonConnection`. New operation names are:
+used by `DaemonConnection`. These Root operations are implemented:
 
 - `external_mcp_settings`
 - `external_mcp_replace` with `{services_json:"[...]"}`
 - `external_mcp_reload` (implemented for the Root daemon; APK/Shizuku hosts remain pending)
 
-The daemon must reject unknown fields and malformed payloads. The replace response is redacted.
-The credential is accepted only in the replace request and must not be echoed in the response.
+The daemon validates service names, duplicate IDs, endpoint policy, service count and credential bounds. The replace response is redacted; credentials are accepted only in the replace request and are never echoed. The committed file is stored atomically with owner-only permissions.
 
 ## APK AIDL operations
 
-The APK host must expose the same three operations through `IDroidBridgeRuntime`. The service
+Pending: the APK host must expose the same three operations through `IDroidBridgeRuntime`. The service
 must authenticate the Binder caller using its existing `verifyCaller()` guard before forwarding
 to the RuntimeHostController. The UI must not use a second, less-restricted Binder service.
 
