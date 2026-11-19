@@ -97,7 +97,7 @@ impl DynamicMcpRegistry {
             None => false,
         };
         let allowed = match parsed_host {
-            Some(IpAddr::V4(ip)) => loopback || ip.is_private() || ip.is_link_local(),
+            Some(IpAddr::V4(ip)) => loopback || ip.is_private(),
             Some(IpAddr::V6(ip)) => loopback || ip.is_unique_local(),
             None => false,
         };
@@ -537,6 +537,8 @@ mod tests {
     fn accepts_private_literal_endpoints_only() {
         assert!(DynamicMcpRegistry::validate_config(&config("http://127.0.0.1:8787/mcp")).is_ok());
         assert!(DynamicMcpRegistry::validate_config(&config("http://10.0.0.8:8787/mcp")).is_ok());
+        assert!(DynamicMcpRegistry::validate_config(&config("http://169.254.169.254/latest/meta-data")).is_err());
+        assert!(DynamicMcpRegistry::validate_config(&config("http://169.254.1.10:8787/mcp")).is_err());
         assert!(DynamicMcpRegistry::validate_config(&config("https://example.com/mcp")).is_err());
         assert!(DynamicMcpRegistry::validate_config(&config("http://example.com/mcp")).is_err());
         assert!(
