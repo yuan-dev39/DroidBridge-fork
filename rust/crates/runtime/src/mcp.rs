@@ -632,11 +632,15 @@ impl<H: McpHost> McpFacade<H> {
                 return invalid_params(id, field_detail("params.cursor", "no such page"));
             }
         }
+        let mut tools = self.tools.as_array().cloned().unwrap_or_default();
+        if let Ok(external) = self.dynamic.list_tools() {
+            tools.extend(external.into_iter().map(|tool| tool.definition));
+        }
         rpc_result(
             id,
             json!({
                 "resultType": "complete",
-                "tools": self.tools,
+                "tools": tools,
                 "ttlMs": 0,
                 "cacheScope": "private",
                 "_meta": self.server_meta(),
@@ -667,7 +671,7 @@ impl<H: McpHost> McpFacade<H> {
             let Some(arguments) = params["arguments"].as_object() else {
                 return invalid_params(id, field_detail("params.arguments", "expected an object"));
             };
-            let arguments = arguments.get("arguments").cloned().unwrap_or_else(|| Value::Object(arguments.clone()));
+            let arguments = Value::Object(arguments.clone());
             let response = match self.dynamic.call(name, arguments).await {
                 Ok(result) => rpc_result(id, json!({
                     "resultType":"complete",
