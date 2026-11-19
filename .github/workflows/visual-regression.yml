@@ -81,7 +81,7 @@ jobs:
         run: cargo install cargo-ndk --locked
       - name: Check Android native executors
         working-directory: rust
-        env:
-          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/29.0.14206865
-          ANDROID_NDK_ROOT: ${{ env.ANDROID_HOME }}/ndk/29.0.14206865
-        run: cargo ndk -t arm64-v8a check --locked -p app_native -p daemon
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/29.0.14206865"
+          export ANDROID_NDK_ROOT="$ANDROID_NDK_HOME"
+          cargo ndk -t arm64-v8a check --locked -p app_native -p daemon
