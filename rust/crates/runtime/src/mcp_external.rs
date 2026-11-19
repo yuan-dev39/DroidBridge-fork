@@ -20,11 +20,15 @@ const MAX_TOOLS_PER_SERVER: usize = 64;
 const MAX_REMOTE_TOOL_NAME_BYTES: usize = 96;
 const MAX_TOTAL_EXTERNAL_TOOLS: usize = 128;
 
+fn default_enabled() -> bool { true }
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct ServerConfig {
     name: String,
     endpoint: String,
+    #[serde(default = "default_enabled")]
+    enabled: bool,
     #[serde(default)]
     bearer_token: Option<String>,
 }
@@ -63,6 +67,7 @@ impl ExternalMcpRegistry {
                 name: "mt".to_owned(),
                 endpoint: std::env::var("DROIDBRIDGE_MT_MCP_URL")
                     .unwrap_or_else(|_| DEFAULT_ENDPOINT.to_owned()),
+                enabled: true,
                 bearer_token: std::env::var("DROIDBRIDGE_MT_MCP_TOKEN").ok(),
             }],
         };
@@ -143,6 +148,7 @@ fn build_servers(configs: Vec<ServerConfig>, previous: Vec<Arc<ExternalMcpServer
     let mut seen_names = BTreeSet::new();
     configs.into_iter().take(MAX_SERVERS)
         .filter(|config| seen_names.insert(config.name.clone()))
+        .filter(|config| config.enabled)
         .filter_map(|config| {
             if let Some(existing) = previous.iter().find(|server| {
                 server.name == config.name
@@ -497,6 +503,7 @@ mod tests {
         let config = ServerConfig {
             name: "mt".to_owned(),
             endpoint: "http://127.0.0.1:8787/mcp".to_owned(),
+            enabled: true,
             bearer_token: Some("secret".to_owned()),
         };
         let previous = build_servers(vec![config.clone()], Vec::new());
