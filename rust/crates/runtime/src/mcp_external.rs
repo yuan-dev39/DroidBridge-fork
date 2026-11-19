@@ -124,9 +124,11 @@ impl ExternalMcpServer {
             !token.is_empty() && token.len() <= 4096 && !token.contains('\r') && !token.contains('\n')
         });
         let client = Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
             .connect_timeout(Duration::from_secs(3))
             .timeout(Duration::from_secs(15))
-            .redirect(reqwest::redirect::Policy::none())
+            // Reuse the Runtime's pinned Rustls verifier; do not fall back to reqwest defaults.
+            .tls_backend_preconfigured(crate::network_tls_client_config().as_ref().clone())
             .build()
             .ok()?;
         Some(Self {
