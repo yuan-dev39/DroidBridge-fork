@@ -89,8 +89,10 @@ impl ExternalMcpRegistry {
             });
         }
         let mut all = Vec::new();
-        while let Some(Ok(tools)) = tasks.join_next().await {
-            all.extend(tools);
+        while let Some(result) = tasks.join_next().await {
+            if let Ok(tools) = result {
+                all.extend(tools);
+            }
         }
         all.sort_by(|left, right| {
             left.get("name").and_then(Value::as_str)
