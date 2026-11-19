@@ -3,6 +3,7 @@ package com.droidbridge.ui.product.mcp
 import java.net.URI
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -54,7 +55,10 @@ object ExternalMcpRegistryContract {
     }
 
     /** Encodes only the native registry's strict JSON array format, never a persistence format. */
-    fun toNativeConfig(services: List<ExternalMcpServiceConfig>): JsonArray {
+    fun toNativeConfig(
+        services: List<ExternalMcpServiceConfig>,
+        clearBearerTokenNames: Set<String> = emptySet(),
+    ): JsonArray {
         require(validate(services) == null) { "external MCP configuration is invalid" }
         return buildJsonArray {
             services.forEach { service ->
@@ -62,7 +66,10 @@ object ExternalMcpRegistryContract {
                     put("name", service.name)
                     put("endpoint", service.endpoint)
                     put("enabled", service.enabled)
-                    service.bearerToken?.let { put("bearer_token", it) }
+                    when {
+                        service.name in clearBearerTokenNames -> put("bearer_token", JsonNull)
+                        service.bearerToken != null -> put("bearer_token", service.bearerToken)
+                    }
                 })
             }
         }
