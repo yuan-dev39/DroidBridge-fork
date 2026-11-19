@@ -323,7 +323,6 @@
     <string name="tunnel_developer_mode_title">ChatGPT のセキュリティ設定で開発者モードを有効にする</string>
     <string name="tunnel_finish_blocked">設定を完了して接続を実行してください</string>
     <string name="tunnel_first_call_title">ChatGPT からの初回呼び出し</string>
-    <string name="tunnel_intro_title">ChatGPT に接続</string>
     <string name="tunnel_open_api_keys">Runtime API Key の設定を開く</string>
     <string name="tunnel_open_create_plugin">ChatGPT プラグインページを開く</string>
     <string name="tunnel_open_developer_settings">ChatGPT のセキュリティ設定を開く</string>
