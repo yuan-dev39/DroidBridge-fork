@@ -323,6 +323,18 @@ mod tests {
     }
 
     #[test]
+    fn external_mcp_credentials_round_trip_in_owner_only_storage() {
+        use std::os::unix::fs::PermissionsExt;
+        let (store, base) = store("external-mcp");
+        let raw = r#"[{"name":"mt","endpoint":"http://127.0.0.1:8787/mcp","bearer_token":"secret"}]"#;
+        store.commit_external_mcp(raw).unwrap();
+        assert_eq!(store.external_mcp().unwrap().as_deref(), Some(raw));
+        let mode = fs::metadata(base.join("external-mcp.json")).unwrap().permissions().mode();
+        assert_eq!(mode & 0o077, 0);
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
     fn identifiers_and_keys_are_bounded() {
         assert!(valid_tunnel_id(&format!("tunnel_{}", "0".repeat(32))));
         assert!(!valid_tunnel_id(&format!("tunnel_{}", "A".repeat(32))));
