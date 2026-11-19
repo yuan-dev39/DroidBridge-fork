@@ -78,8 +78,11 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
             Ok(None) => "[]".to_owned(),
             Err(_) => return failure("IO_ERROR"),
         };
-        let services: Vec<Value> = serde_json::from_str::<Vec<Value>>(&raw).unwrap_or_default()
-            .into_iter().filter_map(|item| {
+        let services: Vec<Value> = match serde_json::from_str::<Vec<Value>>(&raw) {
+            Ok(services) => services,
+            Err(_) => return failure("INVALID_CONFIG"),
+        };
+        let services: Vec<Value> = services.into_iter().filter_map(|item| {
                 let name = item.get("name")?.as_str()?;
                 Some(json!({
                     "name": name,
