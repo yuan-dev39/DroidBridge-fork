@@ -340,4 +340,66 @@
     <string name="unit_hours">時間</string>
     <string name="unit_minutes">分</string>
     <string name="warning_notification_visibility_limited">通知がオフのため、バックグラウンド状態は表示されません。</string>
+    <string name="about_abi">ABI</string>
+    <string name="settings_support">DroidBridge を支援</string>
+    <string name="settings_support_summary">Ko-fi で開発者にコーヒーを贈る</string>
+    <string name="app_name">DroidBridge</string>
+    <string name="automation_intro_ai">AI では次の操作も自動化できます：直前の手順が成功したかどうかで分岐し、手順を繰り返す</string>
+    <string name="automation_intro_body">接続した AI に「毎朝 8 時にアプリを開いてチェックインをタップして」のように指示すると、自動化を作成します。「新規」をタップして自分で作成することもできます。</string>
+    <string name="automation_intro_title">AI に自動化を作成してもらう</string>
+    <string name="automation_intro_what">操作：アプリを開く、画面上のテキストをタップ／長押しする、文字を入力する、キーを押す、待機する、コマンドを実行する、クリップボードにコピーする、ファイルをダウンロード／管理する、ネットワークを確認する</string>
+    <string name="automation_intro_when">実行タイミング：指定時刻、毎日、毎週、繰り返し、DroidBridge の起動時、ネットワーク変更時</string>
+    <string name="automation_readonly">条件またはループが含まれています。AI に変更を依頼してください。</string>
+    <string name="condition_generic">%1$s %2$s %3$s</string>
+    <string name="condition_last_failed">直前の手順が失敗した</string>
+    <string name="condition_last_succeeded">直前の手順が成功した</string>
+    <string name="dialog_clear_chatgpt_body">OpenAI Tunnel ID と暗号化された Runtime API Key がこの端末から削除されます。ローカル MCP の認証情報は変更されません。</string>
+    <string name="dialog_clear_chatgpt_title">ChatGPT の認証情報を消去しますか？</string>
+    <string name="dialog_delete_all_automations_body">すべての自動化と実行履歴が削除されます。この操作は元に戻せません。</string>
+    <string name="dialog_delete_all_automations_title">すべての自動化を削除しますか？</string>
+    <string name="dialog_delete_automation_body">この操作は元に戻せません。</string>
+    <string name="dialog_delete_automation_title">自動化を削除しますか？</string>
+    <string name="dialog_delete_updates_body">ダウンロード済みの更新ファイルが削除されます。インストール済みの APK とモジュールのバージョンは変更されません。</string>
+    <string name="dialog_delete_updates_title">ダウンロード済みの更新ファイルを削除しますか？</string>
+    <string name="dialog_discard_title">未保存の変更を破棄しますか？</string>
+    <string name="dialog_reset_host_body">APK Runtime 用の Runtime host の保護設定を再作成します。Runtime データは保持されます。未検証の実行状態のクリーンアップを迂回することはできません。</string>
+    <string name="dialog_reset_host_title">Runtime host を APK にリセットしますか？</string>
+    <string name="dialog_reset_mcp_body">現在のローカル MCP トークンは直ちに無効になります。Runtime データは変更されません。</string>
+    <string name="dialog_reset_mcp_title">ローカル MCP の認証情報をリセットしますか？</string>
+    <string name="dialog_reset_runtime_body">タスク、自動化、成果物、Runtime の状態が削除されます。ローカル MCP の認証情報とインストール済みモジュールのデータは変更されません。</string>
+    <string name="dialog_reset_runtime_title">Runtime データをリセットしますか？</string>
+    <string name="dialog_rotate_token_body">現在のトークンは直ちに無効になります。</string>
+    <string name="dialog_rotate_token_title">アクセストークンを再生成しますか？</string>
+    <string name="error_interval">間隔は 1 分以上にしてください</string>
+    <string name="error_once_past">未来の時刻を選択してください</string>
+    <string name="error_weekly_days">曜日を 1 つ以上選択してください</string>
+    <string name="mcp_setup_prompt_summary">Codex、Claude Code、opencode などのエージェントに貼り付けてください。アクセストークンが含まれています。</string>
+    <string name="mcp_setup_prompt_template">Android 端末上の MCP サーバー DroidBridge に接続してください。
+
+サーバー名：droidbridge
+URL：%1$s（Streamable HTTP）
+ヘッダー：Authorization: Bearer %3$s
+
+1. 端末上で実行していない場合は、まず `adb devices` に端末が表示されることを確認し、その後 `adb forward tcp:%2$s tcp:%2$s` を実行してください。端末が表示されない場合は停止して知らせてください。
+2. この URL とヘッダーを使用して、現在のドキュメントまたは `mcp add --help` に従い、自分の MCP クライアント設定にリモート HTTP サーバーとして追加してください。OAuth は使用しません。このサーバーに対して OAuth を試みるクライアントでは、OAuth を無効にしてください。
+3. droidbridge の `context` ツールを `{\"action\": \"status\", \"input\": {}}` で呼び出し、報告された準備状態を知らせてください。サーバーのツールが再起動後にしか表示されない場合は、再起動するよう私に伝え、再起動後にその呼び出しを実行してください。
+
+このトークンは私の端末へのアクセス権を与えます。MCP 設定内だけに保存し、私に再表示しないでください。</string>
+    <string name="reason_cleanup_unverified">実行のクリーンアップを検証できませんでした。続行する前に端末を再起動してください。</string>
+    <string name="reason_tunnel_network_monitor_failed">Android のネットワーク監視を開始できませんでした。</string>
+    <string name="snackbar_bulk_delete_result">削除 %1$d 件、失敗 %2$d 件</string>
+    <string name="stranded_confirm_body">中断されたリクエストの結果は失われます。それ以外には影響しません。</string>
+    <string name="stranded_failed">消去できませんでした：%1$s</string>
+    <string name="tunnel_create_plugin_instructions">&amp;#x2022; 右上の「追加」をタップし、「MCP アプリを作成」を選択します。
+&amp;#x2022; 認証を「なし」に設定します。</string>
+    <string name="tunnel_developer_mode_instructions">ChatGPT のセキュリティ設定を開き、開発者モードを有効にしてください。Plus アカウントへの提供は段階的に行われているため、まだ切り替え項目が表示されないアカウントもあります。</string>
+    <string name="tunnel_first_call_waiting">ChatGPT で新しい会話を開始し、メッセージ欄の「＋」をタップして「開発者モード」を選び、%1$s にチェックを入れてから、端末の状態を読み取るよう依頼してください。</string>
+    <string name="tunnel_intro_body">ChatGPT のウェブ版と Plus、Pro、Business、Enterprise、Education のいずれかのアカウントが必要です。以下のリンクをパソコンのブラウザーで開くか、ブラウザーのユーザーエージェントをデスクトップに設定してください。</string>
+    <string name="tunnel_plugin_confirm_body">ChatGPT のセキュリティ設定で開発者モードを有効にし、このトンネルを使用する %1$s プラグインを作成して、認証を「なし」に設定したことを確認してください。</string>
+    <string name="tunnel_plugin_confirm_no">もう一度確認する</string>
+    <string name="reason_backend_not_connected">Root バックエンドが実行されていません。Root 管理アプリで DroidBridge モジュールが有効になっていることを確認し、端末を再起動してください。</string>
+    <string name="capabilities_all_set">すべて準備完了</string>
+    <string name="nav_home">ホーム</string>
+    <string name="settings_data_summary_runtime">認証情報と Runtime データ</string>
+    <string name="shizuku_state_compat_required">Compat Hub のセットアップが必要です</string>
 </resources>
