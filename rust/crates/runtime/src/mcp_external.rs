@@ -46,12 +46,12 @@ struct ExternalMcpServer {
     state: Mutex<RemoteState>,
 }
 
-pub(crate) struct ExternalMcpRegistry {
+pub struct ExternalMcpRegistry {
     servers: Arc<RwLock<Vec<Arc<ExternalMcpServer>>>>,
 }
 
 impl ExternalMcpRegistry {
-    pub(crate) fn new() -> Self {
+    pub fn from_environment() -> Self {
         let configs = match std::env::var("DROIDBRIDGE_EXTERNAL_MCP_SERVICES") {
             Ok(raw) if raw.len() <= 65_536 => {
                 // An explicit empty list disables external services; malformed input fails closed.
@@ -72,7 +72,7 @@ impl ExternalMcpRegistry {
 
     /// Replaces the active service snapshot. Unchanged services retain their client, MCP session,
     /// tool cache and request-id sequence; removed services immediately stop being routable.
-    pub(crate) fn replace_json(&self, raw: &str) -> Result<(), &'static str> {
+    pub fn replace_json(&self, raw: &str) -> Result<(), &'static str> {
         if raw.len() > 65_536 { return Err("INVALID_CONFIG"); }
         let configs: Vec<ServerConfig> =
             serde_json::from_str(raw).map_err(|_| "INVALID_CONFIG")?;
