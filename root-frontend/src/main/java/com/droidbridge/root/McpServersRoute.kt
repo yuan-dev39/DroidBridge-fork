@@ -46,6 +46,7 @@ fun McpServersRoute(connection: DaemonConnection, onBack: () -> Unit) {
         OutlinedTextField(id, { id = it }, label = { Text("Service ID (e.g. mt-manager)") }, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(displayName, { displayName = it }, label = { Text("Display name") }, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(endpoint, { endpoint = it }, label = { Text("MCP endpoint URL") }, modifier = Modifier.fillMaxWidth())
+        Text("Safety: HTTP only, using a literal loopback or private-LAN IP. Public hosts, DNS names and HTTPS are blocked. Bearer tokens are accepted only for loopback URLs.")
         OutlinedTextField(token, { token = it }, label = { Text("Bearer token (optional; write-only)") }, modifier = Modifier.fillMaxWidth())
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = {
@@ -88,7 +89,13 @@ fun McpServersRoute(connection: DaemonConnection, onBack: () -> Unit) {
                             Button(onClick = {
                                 scope.launch {
                                     runCatching { connection.refreshMcpServer(serverId) }
-                                        .onSuccess { snapshot = it; message = "Discovery finished" }
+                                        .onSuccess {
+                                            snapshot = it
+                                            val reply = runCatching { Json.parseToJsonElement(it).jsonObject }.getOrNull()
+                                            val refreshed = reply?.get("refreshed")?.jsonPrimitive?.contentOrNull == "true"
+                                            val error = reply?.get("error")?.jsonPrimitive?.contentOrNull
+                                            message = if (refreshed) "Discovery finished" else "Connection test failed: ${error ?: "UPSTREAM_UNAVAILABLE"}"
+                                        }
                                         .onFailure { message = it.message ?: "Refresh failed" }
                                 }
                             }) { Text("Test / refresh") }
