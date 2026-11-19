@@ -79,7 +79,10 @@ impl DynamicMcpRegistry {
         Self::validate_config(&config)?;
         let mut entries = self.servers.write().map_err(|_| RegistryError::Unavailable)?;
         if !entries.contains_key(&config.id) && entries.len() >= MAX_SERVERS { return Err(RegistryError::Invalid("server limit reached")); }
-        let old = entries.get(&config.id).cloned().unwrap_or_default();
+        let old = entries.get(&config.id).cloned().filter(|entry| {
+            entry.config.as_ref().is_some_and(|current|
+                current.endpoint == config.endpoint && current.bearer_token == config.bearer_token)
+        }).unwrap_or_default();
         entries.insert(config.id.clone(), ServerEntry { config: Some(config), ..old });
         Ok(())
     }
@@ -205,6 +208,7 @@ async fn send_rpc(config: &McpServerConfig, session: Option<&str>, method: &str,
         value.set_sensitive(true);
         request = request.header(AUTHORIZATION, value);
     }
+    if method != "initialize" { request = request.header("MCP-Protocol-Version", "2025-03-26"); }
     if let Some(session) = session { request = request.header("Mcp-Session-Id", session); }
     let body = if method.starts_with("notifications/") {
         json!({"jsonrpc":"2.0","method":method,"params":params})
