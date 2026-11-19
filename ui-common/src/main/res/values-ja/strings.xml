@@ -126,6 +126,7 @@
     <string name="external_mcp_title">外部 MCP サーバー</string>
     <string name="external_mcp_add">サーバーを追加</string>
     <string name="external_mcp_edit">サーバーを編集</string>
+    <string name="external_mcp_name_hint">1～24 文字の小文字英字、数字、アンダースコア、ハイフンを使用します。この ID がツール名の接頭辞になります。</string>
     <string name="external_mcp_name">サービス ID</string>
     <string name="external_mcp_endpoint">MCP エンドポイント</string>
     <string name="external_mcp_endpoint_hint">HTTP は localhost またはプライベート LAN のみ。公開サーバーには HTTPS を使用し、パスは /mcp にしてください。</string>
