@@ -27,4 +27,5 @@
     <string name="mcp_servers_removed">サーバーを削除しました</string>
     <string name="mcp_servers_remove_failed">削除に失敗しました</string>
     <string name="mcp_servers_remove">削除</string>
+    <string name="key_back">戻る</string>
 </resources>
