@@ -77,7 +77,7 @@ jobs:
           set +o pipefail
           yes | "$SDKMANAGER" --licenses >/dev/null
           set -o pipefail
-          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" "ndk;29.0.14206865"
+          "$SDKMANAGER" "platforms;android-36" "platforms;android-37.0" "build-tools;36.0.0" "ndk;29.0.14206865"
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.98.0
