@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.os.IBinder
+import android.os.Parcel
 import com.droidbridge.ui.client.CapabilityAction
 import com.droidbridge.ui.client.CapabilityRow
 import com.droidbridge.ui.client.CapabilityRowKey
@@ -101,7 +102,7 @@ class ShizukuBackendController(context: Context) {
             .daemon(false).processNameSuffix("droidbridge_probe").tag(USER_SERVICE_TAG).version(USER_SERVICE_VERSION)
         val serviceConnection = object : ServiceConnection {
             override fun onServiceConnected(name: ComponentName, binder: IBinder) {
-                val uid = runCatching { IShizukuProbe.Stub.asInterface(binder).uid }.getOrNull()
+                val uid = readProbeUid(binder)
                 synchronized(this@ShizukuBackendController) {
                     if (currentGeneration != generation.get() || connection !== this) return
                     when (uid) {
@@ -119,6 +120,22 @@ class ShizukuBackendController(context: Context) {
         publish(CapabilityRowState.Connecting, null)
         runCatching { Shizuku.bindUserService(serviceArgs, serviceConnection) }.onFailure {
             if (currentGeneration == generation.get()) { connection = null; args = null; publish(CapabilityRowState.NotRunning, CapabilityAction.Recheck) }
+        }
+    }
+
+    private fun readProbeUid(binder: IBinder): Int? {
+        val data = Parcel.obtain()
+        val reply = Parcel.obtain()
+        return try {
+            data.writeInterfaceToken(ShizukuProbeProtocol.DESCRIPTOR)
+            if (!binder.transact(ShizukuProbeProtocol.TRANSACTION_GET_UID, data, reply, 0)) return null
+            reply.readException()
+            reply.readInt()
+        } catch (_: Exception) {
+            null
+        } finally {
+            data.recycle()
+            reply.recycle()
         }
     }
 
