@@ -40,9 +40,11 @@ jobs:
           java-version: '17'
       - name: Install Android SDK packages
         run: |
-          echo "${ANDROID_HOME:-$ANDROID_SDK_ROOT}" >> $GITHUB_PATH
-          yes | sdkmanager --licenses >/dev/null
-          sdkmanager "platforms;android-37" "build-tools;36.0.0"
+          SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
+          test -n "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null
+          "$SDKMANAGER" "platforms;android-37" "build-tools;36.0.0"
       - uses: gradle/actions/setup-gradle@v4
       - name: Run shared UI tests and Root frontend Kotlin compile
         run: ./gradlew --no-daemon :ui-common:testDebugUnitTest :root-frontend:compileDebugKotlin
