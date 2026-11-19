@@ -7,9 +7,10 @@ use serde_json::{json, Value};
 use std::{
     collections::BTreeSet,
     net::IpAddr,
+    sync::Arc,
     time::Duration,
 };
-use tokio::{sync::Mutex, time::Instant};
+use tokio::{sync::Mutex, task::JoinSet, time::{Instant, timeout}};
 
 const DEFAULT_ENDPOINT: &str = "http://127.0.0.1:8787/mcp";
 const CACHE_TTL: Duration = Duration::from_secs(15);
@@ -44,7 +45,7 @@ struct ExternalMcpServer {
 }
 
 pub(crate) struct ExternalMcpRegistry {
-    servers: Vec<ExternalMcpServer>,
+    servers: Vec<Arc<ExternalMcpServer>>,
 }
 
 impl ExternalMcpRegistry {
@@ -69,6 +70,7 @@ impl ExternalMcpRegistry {
             .take(MAX_SERVERS)
             .filter(|config| seen_names.insert(config.name.clone()))
             .filter_map(ExternalMcpServer::new)
+            .map(Arc::new)
             .collect();
         Self { servers }
     }
@@ -76,9 +78,18 @@ impl ExternalMcpRegistry {
     /// Discovers tools from every configured server. One unavailable server does not prevent
     /// healthy servers or native DroidBridge tools from being listed.
     pub(crate) async fn tools(&self) -> Vec<Value> {
-        let mut all = Vec::new();
+        let mut tasks = JoinSet::new();
         for server in &self.servers {
-            all.extend(server.tools().await);
+            let server = Arc::clone(server);
+            tasks.spawn(async move {
+                timeout(Duration::from_secs(4), server.tools())
+                    .await
+                    .unwrap_or_default()
+            });
+        }
+        let mut all = Vec::new();
+        while let Some(Ok(tools)) = tasks.join_next().await {
+            all.extend(tools);
         }
         all
     }
@@ -214,9 +225,10 @@ impl ExternalMcpServer {
 
     async fn rpc(&self, state: &mut RemoteState, method: &str, params: Value) -> Result<Value, String> {
         state.next_id = state.next_id.saturating_add(1).max(1);
+        let request_id = state.next_id;
         let payload = json!({
             "jsonrpc": "2.0",
-            "id": state.next_id,
+            "id": request_id,
             "method": method,
             "params": params
         });
@@ -244,12 +256,19 @@ impl ExternalMcpServer {
             .and_then(|value| value.to_str().ok())
             .unwrap_or("")
             .to_ascii_lowercase();
-        let bytes = response.bytes().await
-            .map_err(|_| "remote MCP response could not be read".to_owned())?;
-        if bytes.len() > MAX_RESPONSE_BYTES {
+        if response.content_length().is_some_and(|length| length > MAX_RESPONSE_BYTES as u64) {
             return Err("remote MCP response exceeds the 2 MiB limit".to_owned());
         }
-        let text = String::from_utf8(bytes.to_vec())
+        let mut response = response;
+        let mut bytes = Vec::new();
+        while let Some(chunk) = response.chunk().await
+            .map_err(|_| "remote MCP response could not be read".to_owned())? {
+            if bytes.len().saturating_add(chunk.len()) > MAX_RESPONSE_BYTES {
+                return Err("remote MCP response exceeds the 2 MiB limit".to_owned());
+            }
+            bytes.extend_from_slice(&chunk);
+        }
+        let text = String::from_utf8(bytes)
             .map_err(|_| "remote MCP response is not UTF-8".to_owned())?;
         let body = if content_type.starts_with("text/event-stream") {
             text.lines()
@@ -264,6 +283,9 @@ impl ExternalMcpServer {
         };
         let value: Value = serde_json::from_str(&body)
             .map_err(|_| "remote MCP response is not valid JSON-RPC".to_owned())?;
+        if value.get("id") != Some(&json!(request_id)) {
+            return Err("remote MCP response id does not match the request".to_owned());
+        }
         if let Some(error) = value.get("error") {
             return Err(error.get("message").and_then(Value::as_str)
                 .unwrap_or("remote MCP error").to_owned());
