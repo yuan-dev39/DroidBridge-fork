@@ -398,4 +398,17 @@
     <string name="nav_home">Home</string>
     <string name="settings_data_summary_runtime">Credentials and Runtime data</string>
     <string name="shizuku_state_compat_required">Compat Hub setup required</string>
+    <string name="settings_external_mcp_title">External MCP services</string>
+    <string name="settings_external_mcp_summary">Register local MCP servers and integrate their tools into DroidBridge.</string>
+    <string name="external_mcp_add">Add service</string>
+    <string name="external_mcp_name">Service name</string>
+    <string name="external_mcp_endpoint">MCP endpoint</string>
+    <string name="external_mcp_token">Bearer token (optional)</string>
+    <string name="external_mcp_prefix">Tool namespace</string>
+    <string name="external_mcp_test">Test connection</string>
+    <string name="external_mcp_connected">Connected</string>
+    <string name="external_mcp_disconnected">Disconnected</string>
+    <string name="external_mcp_tools_count">%1$d tools discovered</string>
+    <string name="external_mcp_remove">Remove service</string>
+    <string name="external_mcp_security_note">For security, only localhost / 127.0.0.1 HTTP endpoints are allowed by default.</string>
 </resources>
