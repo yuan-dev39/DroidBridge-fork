@@ -35,8 +35,8 @@ The Root frontend and daemon communicate over the authenticated Unix socket prot
 used by `DaemonConnection`. New operation names are:
 
 - `external_mcp_settings`
-- `external_mcp_replace` with `{services:[...]}`
-- `external_mcp_reload`
+- `external_mcp_replace` with `{services_json:"[...]"}`
+- `external_mcp_reload` (implemented for the Root daemon; APK/Shizuku hosts remain pending)
 
 The daemon must reject unknown fields and malformed payloads. The replace response is redacted.
 The credential is accepted only in the replace request and must not be echoed in the response.
