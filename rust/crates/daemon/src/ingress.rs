@@ -27,8 +27,18 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
     pub(crate) fn new(settings: SettingsStore, port: u16) -> Self {
         let external_registry = {
             let registry = ExternalMcpRegistry::from_environment();
-            if let Ok(Some(raw)) = settings.external_mcp() {
-                let _ = registry.replace_json(&raw);
+            match settings.external_mcp() {
+                Ok(Some(raw)) => {
+                    if registry.replace_json(&raw).is_err() {
+                        // A corrupt persisted snapshot must never fall back to environment secrets.
+                        let _ = registry.replace_json("[]");
+                    }
+                }
+                Ok(None) => {}
+                Err(_) => {
+                    // Insecure or unreadable persisted credentials fail closed.
+                    let _ = registry.replace_json("[]");
+                }
             }
             registry
         };
