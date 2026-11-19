@@ -336,6 +336,17 @@ mod unix {
             request: CommandProcessRequest,
             claim: &LocalExecutionClaim,
         ) -> Result<CommandProcessSettlement, ExecutionFailure> {
+            #[cfg(target_os = "android")]
+            {
+                let uid = unsafe { libc::getuid() };
+                let euid = unsafe { libc::geteuid() };
+                if uid < 10_000 || uid != euid {
+                    return Err(pre_start(DomainError::new(
+                        ErrorCode::PermissionDenied,
+                        "App command host is not running under its application UID",
+                    )));
+                }
+            }
             let guard_path = self.guard_path().map_err(pre_start)?;
             let (stdout_read, stdout_write) = pipe()?;
             let (stderr_read, stderr_write) = pipe()?;
