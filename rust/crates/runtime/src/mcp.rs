@@ -2,7 +2,7 @@
 //! that frames them; initialization-based clients of the 2025 revisions are served alongside. The facade owns no Task, Automation, capability or host truth: every tool call
 //! and resource query goes to the currently authoritative Runtime through [`McpHost`].
 
-use crate::{PortFuture, command::new_uuid, mcp_external::{ExternalMcpRegistry, is_external_tool, original_tool_name}};
+use crate::{PortFuture, command::new_uuid, mcp_external::{ExternalMcpRegistry, is_external_tool}};
 use base64::{
     Engine,
     engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
@@ -661,7 +661,7 @@ impl<H: McpHost> McpFacade<H> {
             let Some(arguments) = params["arguments"].as_object() else {
                 return invalid_params(id, field_detail("params.arguments", "expected an object"));
             };
-            return match self.external.call(original_tool_name(requested_name), Value::Object(arguments.clone())).await {
+            return match self.external.call(requested_name, Value::Object(arguments.clone())).await {
                 Ok(result) => rpc_result(id, result),
                 Err(_) => rpc_error(200, id, INTERNAL_ERROR, "External MCP tool call failed", None),
             };
