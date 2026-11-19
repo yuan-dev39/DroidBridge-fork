@@ -7,7 +7,7 @@ use serde_json::{json, Value};
 use std::{
     collections::BTreeSet,
     net::IpAddr,
-    sync::Arc,
+    sync::{Arc, RwLock},
     time::Duration,
 };
 use tokio::{sync::Mutex, task::JoinSet, time::{Instant, timeout}};
@@ -20,9 +20,9 @@ const MAX_TOOLS_PER_SERVER: usize = 64;
 const MAX_REMOTE_TOOL_NAME_BYTES: usize = 96;
 const MAX_TOTAL_EXTERNAL_TOOLS: usize = 128;
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
-struct ServerConfig {
+pub(crate) struct ServerConfig {
     name: String,
     endpoint: String,
     #[serde(default)]
@@ -47,7 +47,7 @@ struct ExternalMcpServer {
 }
 
 pub(crate) struct ExternalMcpRegistry {
-    servers: Vec<Arc<ExternalMcpServer>>,
+    servers: Arc<RwLock<Vec<Arc<ExternalMcpServer>>>>,
 }
 
 impl ExternalMcpRegistry {
@@ -66,23 +66,42 @@ impl ExternalMcpRegistry {
             }],
         };
 
-        let mut seen_names = BTreeSet::new();
-        let servers = configs
-            .into_iter()
-            .take(MAX_SERVERS)
-            .filter(|config| seen_names.insert(config.name.clone()))
-            .filter_map(ExternalMcpServer::new)
-            .map(Arc::new)
-            .collect();
-        Self { servers }
+        let servers = build_servers(configs, Vec::new());
+        Self { servers: Arc::new(RwLock::new(servers)) }
+    }
+
+    /// Replaces the active service snapshot. Unchanged services retain their client, MCP session,
+    /// tool cache and request-id sequence; removed services immediately stop being routable.
+    pub(crate) fn replace_json(&self, raw: &str) -> Result<(), &'static str> {
+        if raw.len() > 65_536 { return Err("INVALID_CONFIG"); }
+        let configs: Vec<ServerConfig> =
+            serde_json::from_str(raw).map_err(|_| "INVALID_CONFIG")?;
+        if configs.len() > MAX_SERVERS { return Err("TOO_MANY_SERVICES"); }
+        let mut seen = BTreeSet::new();
+        for config in &configs {
+            if !valid_service_name(&config.name)
+                || config.endpoint.len() > 2048
+                || safe_endpoint(&config.endpoint).is_none()
+                || config.bearer_token.as_ref().is_some_and(|token| {
+                    token.len() > 4096 || token.contains('\\r') || token.contains('\\n')
+                })
+            {
+                return Err("INVALID_CONFIG");
+            }
+            if !seen.insert(config.name.clone()) { return Err("DUPLICATE_SERVICE_NAME"); }
+        }
+        let mut active = self.servers.write().map_err(|_| "RUNTIME_UNAVAILABLE")?;
+        let previous = active.clone();
+        *active = build_servers(configs, previous);
+        Ok(())
     }
 
     /// Discovers tools from every configured server. One unavailable server does not prevent
     /// healthy servers or native DroidBridge tools from being listed.
     pub(crate) async fn tools(&self) -> Vec<Value> {
+        let servers = self.servers.read().map(|items| items.clone()).unwrap_or_default();
         let mut tasks = JoinSet::new();
-        for server in &self.servers {
-            let server = Arc::clone(server);
+        for server in servers {
             tasks.spawn(async move {
                 timeout(Duration::from_secs(4), server.tools())
                     .await
@@ -108,11 +127,31 @@ impl ExternalMcpRegistry {
         let (server_name, tool_name) = qualified_name
             .split_once("__")
             .ok_or_else(|| "external tool name has no service namespace".to_owned())?;
-        let server = self.servers.iter()
+        let servers = self.servers.read()
+            .map_err(|_| "external MCP registry is unavailable".to_owned())?;
+        let server = servers.iter()
             .find(|server| server.name == server_name)
+            .cloned()
             .ok_or_else(|| "external MCP service is not configured".to_owned())?;
+        drop(servers);
         server.call(tool_name, arguments).await
     }
+}
+
+fn build_servers(configs: Vec<ServerConfig>, previous: Vec<Arc<ExternalMcpServer>>) -> Vec<Arc<ExternalMcpServer>> {
+    let mut seen_names = BTreeSet::new();
+    configs.into_iter().take(MAX_SERVERS)
+        .filter(|config| seen_names.insert(config.name.clone()))
+        .filter_map(|config| {
+            if let Some(existing) = previous.iter().find(|server| {
+                server.name == config.name
+                    && server.endpoint.as_str() == config.endpoint
+                    && server.bearer_token == config.bearer_token
+            }) {
+                return Some(Arc::clone(existing));
+            }
+            ExternalMcpServer::new(config).map(Arc::new)
+        }).collect()
 }
 
 impl ExternalMcpServer {
