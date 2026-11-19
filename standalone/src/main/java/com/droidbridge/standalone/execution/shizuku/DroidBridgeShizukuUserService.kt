@@ -204,8 +204,15 @@ class DroidBridgeShizukuUserService : IShizukuUserService.Stub {
             val requiredCallback = requireNotNull(callback)
             val client = synchronized(this) { requireClient(requiredToken, Binder.getCallingUid()) }
             require(UUID.fromString(requiredExecutionId).toString() == requiredExecutionId)
+            val requiredPrimitive = requireNotNull(primitive)
+            if (requiredPrimitive == "process_start" &&
+                !ShizukuLaunchPolicy.isShellUid(Process.myUid())
+            ) {
+                // Enforce the actual UserService UID before nativeStart can spawn a process.
+                throw SecurityException("Shizuku execution identity rejected")
+            }
             val plan = ShizukuGuardedPlanCodec.decode(
-                requireNotNull(primitive),
+                requiredPrimitive,
                 requireNotNull(payload),
                 client.guardPath,
             )
