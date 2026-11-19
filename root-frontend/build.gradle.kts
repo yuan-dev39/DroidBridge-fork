@@ -69,6 +69,8 @@ android {
     }
 
     androidResources {
+        // Generate Android's per-app locale config from ui-common resources. With no app-level
+        // locale override, Android resolves Chinese/Japanese/English from the device language.
         generateLocaleConfig = true
     }
 
