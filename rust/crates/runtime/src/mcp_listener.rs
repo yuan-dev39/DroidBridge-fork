@@ -1,4 +1,4 @@
-//! The loopback MCP listener (S-MCP-001, S-STACK-011). Pinned Hyper frames HTTP/1.1 and the shared
+//! Authenticated loopback and private-LAN MCP listeners (S-MCP-001, S-STACK-011). Pinned Hyper frames HTTP/1.1 and the shared
 //! facade owns every protocol decision; the host it is built with is the authoritative Runtime.
 
 use crate::{MCP_BODY_LIMIT_BYTES, McpFacade, McpHost, McpRequest};
@@ -263,6 +263,26 @@ mod tests {
 
     const TOKEN: &str = "tXw1sO3n6b2WqQm9J0gKf8yVhZcR4dLpA7eNuTiYkMs";
     const ROTATED: &str = "Q2Vk5Yv0nLm8sX1rT4aZ7uB3cW6eH9jK2pF5gD8iM0o";
+
+    #[test]
+    fn lan_listener_accepts_private_peers_and_rejects_public_peers() {
+        use std::net::IpAddr;
+
+        for address in [
+            "127.0.0.1",
+            "10.0.0.8",
+            "172.16.4.2",
+            "192.168.1.20",
+            "169.254.1.2",
+            "fc00::1",
+            "fe80::1",
+        ] {
+            assert!(is_private_lan_peer(address.parse::<IpAddr>().unwrap()), "{address}");
+        }
+        for address in ["8.8.8.8", "1.1.1.1", "172.15.255.1", "192.0.2.10", "2001:4860:4860::8888"] {
+            assert!(!is_private_lan_peer(address.parse::<IpAddr>().unwrap()), "{address}");
+        }
+    }
 
     struct CannedHost;
 
