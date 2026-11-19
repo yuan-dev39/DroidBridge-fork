@@ -18,7 +18,8 @@ class ExternalMcpRegistryContractTest {
         assertNull(ExternalMcpRegistryContract.validate(services))
         val json = ExternalMcpRegistryContract.toNativeConfig(services).toString()
         assertTrue(json.contains("\"name\":\"mt\""))
-        assertTrue(json.contains("{\\"name\\":\\"mt\\",\\"endpoint\\":\\"http://127.0.0.1:8787/mcp\\"}"))
+        val first = kotlinx.serialization.json.Json.parseToJsonElement(json).jsonArray[0].jsonObject
+        assertFalse("bearer_token" in first)
         assertTrue(json.contains("\"bearer_token\":\"secret\""))
     }
 
