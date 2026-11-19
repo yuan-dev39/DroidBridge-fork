@@ -16,6 +16,7 @@ import kotlinx.serialization.json.put
 data class ExternalMcpServiceConfig(
     val name: String,
     val endpoint: String,
+    val enabled: Boolean = true,
     val bearerToken: String? = null,
 )
 
@@ -45,7 +46,7 @@ object ExternalMcpRegistryContract {
             if (token != null && (
                     token.length > MAX_BEARER_TOKEN_LENGTH ||
                         token.isEmpty() ||
-                        token.any { it == '\r' || it == '\n' }
+                        token.any { it.code !in 33..126 }
                 )
             ) return ValidationError(index, "INVALID_BEARER_TOKEN")
         }
@@ -60,6 +61,7 @@ object ExternalMcpRegistryContract {
                 add(buildJsonObject {
                     put("name", service.name)
                     put("endpoint", service.endpoint)
+                    put("enabled", service.enabled)
                     service.bearerToken?.let { put("bearer_token", it) }
                 })
             }
@@ -70,6 +72,7 @@ object ExternalMcpRegistryContract {
     fun safeSummary(service: ExternalMcpServiceConfig): JsonObject = buildJsonObject {
         put("name", service.name)
         put("endpoint", service.endpoint)
+        put("enabled", service.enabled)
         put("has_bearer_token", !service.bearerToken.isNullOrEmpty())
     }
 
