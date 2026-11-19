@@ -38,9 +38,11 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
-      - name: Install Android SDK
-        run: sdkmanager "platforms;android-37" "build-tools;36.0.0"
+      - name: Install Android SDK packages
+        run: |
+          echo "${ANDROID_HOME:-$ANDROID_SDK_ROOT}" >> $GITHUB_PATH
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager "platforms;android-37" "build-tools;36.0.0"
       - uses: gradle/actions/setup-gradle@v4
       - name: Run shared UI tests and Root frontend Kotlin compile
         run: ./gradlew --no-daemon :ui-common:testDebugUnitTest :root-frontend:compileDebugKotlin
