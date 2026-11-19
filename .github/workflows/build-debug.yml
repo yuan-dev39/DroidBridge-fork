@@ -1,0 +1,77 @@
+name: Build installable debug packages
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main, master]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-debug-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-debug:
+    name: Build Shizuku APK and Root Magisk module
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        shell: pwsh
+        run: |
+          sdkmanager --install "platforms;android-37" "build-tools;36.0.0" "ndk;29.0.14206865"
+          sdkmanager --licenses | Out-Null
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.98.0
+          targets: aarch64-linux-android,x86_64-linux-android
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - name: Install cargo-ndk
+        shell: pwsh
+        run: cargo install cargo-ndk --locked
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build standalone Shizuku APK and Root debug module
+        shell: pwsh
+        run: |
+          ./gradlew.bat --no-daemon --dependency-verification=off :standalone:assembleDebug :root-frontend:assembleDebugMagiskModule
+
+      - name: Verify package outputs
+        shell: pwsh
+        run: |
+          $apk = "standalone/build/outputs/apk/debug/standalone-debug.apk"
+          $module = "root-frontend/build/outputs/magisk/droidbridge-debug-magisk.zip"
+          if (!(Test-Path $apk)) { throw "Missing Shizuku debug APK: $apk" }
+          if (!(Test-Path $module)) { throw "Missing Root Magisk module: $module" }
+          Copy-Item $apk "droidbridge-shizuku-debug.apk"
+          Copy-Item $module "droidbridge-root-debug-magisk.zip"
+          Get-FileHash "droidbridge-shizuku-debug.apk" -Algorithm SHA256 | Format-List | Out-File SHA256SUMS.txt
+          Get-FileHash "droidbridge-root-debug-magisk.zip" -Algorithm SHA256 | Format-List | Out-File -Append SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: droidbridge-debug-installers
+          path: |
+            droidbridge-shizuku-debug.apk
+            droidbridge-root-debug-magisk.zip
+            SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
