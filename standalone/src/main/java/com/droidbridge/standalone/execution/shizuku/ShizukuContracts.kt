@@ -187,6 +187,8 @@ internal enum class ShizukuProbeSettlement {
 }
 
 internal object ShizukuLaunchPolicy {
+    fun isShellUid(uid: Int): Boolean = uid == SHELL_UID
+
     fun isAdmitted(
         effectiveUid: Int,
         callerUid: Int,

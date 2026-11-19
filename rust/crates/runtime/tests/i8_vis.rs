@@ -326,11 +326,12 @@ impl VisualPrimitivePort for FixtureVisualPort {
 
     fn interact(
         &self,
-        _execution: &AdmittedExecution,
+        execution: &AdmittedExecution,
         request: VisualInteractionRequest,
         _claim: &LocalExecutionClaim,
     ) -> Result<(), ExecutionFailure> {
         let mut state = self.state.lock().unwrap();
+        state.providers.push(execution.executor.provider);
         if state.stale_interaction {
             return Err(ExecutionFailure {
                 error: DomainError::new(ErrorCode::StaleReference, "scene proof changed"),
@@ -437,6 +438,44 @@ async fn i8_vis_g01_observe_freezes_display_and_each_selected_source_before_side
             runtime::ProviderToken::Accessibility,
         ],
     );
+}
+
+#[tokio::test]
+async fn i8_vis_coordinate_input_accepts_current_hierarchy_from_a_different_provider() {
+    let (core, primitive) = core(CapabilityState::Available, CapabilityState::Available);
+    let observed = submit(&core, 700, observe_payload(), NOW_MS).await;
+    assert_eq!(observed["outcome"], "success", "{observed}");
+    let observation_id = observed["result"]["observation_id"].as_str().unwrap();
+
+    // Observe's hierarchy route is Accessibility, while coordinate input is resolved
+    // independently (Shizuku on this fixture). Both providers remain current under
+    // the same Runtime fence, so a safe coordinate action must not be rejected merely
+    // because its delivery executor differs from the hierarchy executor.
+    let interacted = submit(
+        &core,
+        701,
+        serde_json::json!({
+            "tool": "visual",
+            "action": "interact",
+            "input": {
+                "operation": "swipe",
+                "observation_id": observation_id,
+                "from_x": 540,
+                "from_y": 1800,
+                "to_x": 540,
+                "to_y": 600,
+                "duration_ms": 350
+            }
+        }),
+        NOW_MS + 1,
+    )
+    .await;
+    assert_eq!(interacted["outcome"], "success", "{interacted}");
+    assert_eq!(interacted["result"]["delivered"], true);
+    assert_eq!(primitive.interactions().len(), 1);
+    let providers = primitive.providers();
+    assert!(providers.contains(&runtime::ProviderToken::Accessibility));
+    assert!(providers.contains(&runtime::ProviderToken::Shizuku));
 }
 
 #[tokio::test]

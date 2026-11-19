@@ -824,6 +824,7 @@ where
                 &observations,
                 execution,
                 claim,
+                &current,
                 &envelope,
                 input,
             )?
@@ -1221,6 +1222,7 @@ fn execute_interact<P>(
     observations: &Arc<Mutex<VisualObservationCache>>,
     execution: &AdmittedExecution,
     claim: &LocalExecutionClaim,
+    current: &CapabilitySnapshot,
     envelope: &VisualExecutionEnvelope,
     input: &VisualInteractInput,
 ) -> Result<serde_json::Value, ExecutionFailure>
@@ -1230,14 +1232,14 @@ where
     let (request, target, pinned) = match input {
         VisualInteractInput::Tap { target, .. } => interaction_target(
             observations,
-            execution,
+            current,
             envelope.admitted_at_ms,
             target,
             "tap",
         )?,
         VisualInteractInput::LongPress { target, .. } => interaction_target(
             observations,
-            execution,
+            current,
             envelope.admitted_at_ms,
             target,
             "long_press",
@@ -1257,7 +1259,7 @@ where
                     .display
                     .clone()
                     .ok_or_else(|| verified_failure(stale_reference()))?;
-                require_observation_executor(&record, execution)?;
+                require_observation_executor(&record, current)?;
                 let proof = record
                     .proof
                     .clone()
@@ -1300,7 +1302,7 @@ where
                 .pin_node(node_ref, envelope.admitted_at_ms)
                 .map_err(verified_failure)?;
             let built = (|| {
-                require_observation_executor(&record, execution)?;
+                require_observation_executor(&record, current)?;
                 let display = record
                     .display
                     .clone()
@@ -1388,7 +1390,7 @@ where
 
 fn interaction_target(
     observations: &Arc<Mutex<VisualObservationCache>>,
-    execution: &AdmittedExecution,
+    current: &CapabilitySnapshot,
     now_ms: u64,
     target: &PointTarget,
     operation: &str,
@@ -1408,7 +1410,7 @@ fn interaction_target(
                 .pin_node(node_ref, now_ms)
                 .map_err(verified_failure)?;
             let built = (|| {
-                require_observation_executor(&record, execution)?;
+                require_observation_executor(&record, current)?;
                 let display = record
                     .display
                     .clone()
@@ -1441,7 +1443,7 @@ fn interaction_target(
         } => {
             let record = pin_observation(observations, observation_id, now_ms)?;
             let built = (|| {
-                require_observation_executor(&record, execution)?;
+                require_observation_executor(&record, current)?;
                 let display = record
                     .display
                     .clone()
@@ -1544,9 +1546,18 @@ fn expected_package(
 
 fn require_observation_executor(
     record: &VisualObservationRecord,
-    execution: &AdmittedExecution,
+    current: &CapabilitySnapshot,
 ) -> Result<(), ExecutionFailure> {
-    if record.hierarchy_executor.as_ref() != Some(&execution.executor) {
+    // Observation and input are admitted through different routes: hierarchy may be
+    // supplied by Accessibility while coordinate input is supplied by Shizuku or
+    // Magisk. Bind the observation to its original hierarchy provider, and re-resolve
+    // that provider against the current capability snapshot instead of requiring it
+    // to equal the input executor. The input executor itself is independently fenced
+    // by execute_visual before this function is reached.
+    let Some(hierarchy_executor) = record.hierarchy_executor.as_ref() else {
+        return Err(verified_failure(stale_reference()));
+    };
+    if !source_is_current(current, hierarchy_executor, VisualRoute::Hierarchy) {
         return Err(verified_failure(stale_reference()));
     }
     Ok(())

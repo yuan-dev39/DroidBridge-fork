@@ -82,6 +82,8 @@ pub struct CommandProcessRequest {
 #[derive(Clone, Debug, PartialEq)]
 pub struct CommandProcessSettlement {
     pub outcome: CommandProcessOutcome,
+    /// Host-attested identity; never inferred from the request.
+    pub actual_run_as: Option<RunAs>,
     pub cleanup_verified: bool,
 }
 
@@ -123,6 +125,9 @@ pub struct AndroidCommandSettlement {
         skip_serializing_if = "is_verified_cleanup"
     )]
     cleanup_verified: bool,
+    /// Missing evidence is rejected before a successful public result is built.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    actual_run_as: Option<RunAs>,
 }
 
 const fn verified_cleanup() -> bool {
@@ -157,6 +162,7 @@ impl AndroidCommandSettlement {
                 stderr,
                 stderr_truncated: settlement.stderr_truncated,
             },
+            actual_run_as: settlement.actual_run_as,
             cleanup_verified: settlement.cleanup_verified,
         })
     }
@@ -177,6 +183,7 @@ impl AndroidCommandSettlement {
             stderr_base64: BASE64.encode(&settlement.outcome.stderr),
             stderr_truncated: settlement.outcome.stderr_truncated,
             cleanup_verified: settlement.cleanup_verified,
+            actual_run_as: settlement.actual_run_as,
         })
         .map_err(|_| {
             DomainError::new(
@@ -658,6 +665,7 @@ where
     let result = match command_result(
         &settlement.outcome,
         input,
+        settlement.actual_run_as,
         execution.executor.execution_class,
         duration_ms,
         &artifacts,
@@ -752,6 +760,7 @@ fn command_cancellation(
 fn command_result<A: ArtifactPort>(
     outcome: &CommandProcessOutcome,
     input: &CommandRunInput,
+    actual_run_as: Option<RunAs>,
     execution_class: contract::ExecutionClass,
     duration_ms: u64,
     artifacts: &A,
@@ -777,6 +786,18 @@ fn command_result<A: ArtifactPort>(
             ));
         }
     };
+    let actual_run_as = actual_run_as.ok_or_else(|| {
+        DomainError::new(
+            ErrorCode::PermissionDenied,
+            "command executor did not attest its operating-system identity",
+        )
+    })?;
+    if actual_run_as != input.run_as {
+        return Err(DomainError::new(
+            ErrorCode::PermissionDenied,
+            "command executor identity does not match the requested identity",
+        ));
+    }
     let mut result = CommandResult {
         state,
         failure_code,
@@ -784,7 +805,7 @@ fn command_result<A: ArtifactPort>(
             .then_some(outcome.exit_code)
             .flatten(),
         requested_run_as: input.run_as,
-        actual_run_as: input.run_as,
+        actual_run_as,
         execution_class,
         duration_ms,
         stdout: None,

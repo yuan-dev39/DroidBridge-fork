@@ -608,6 +608,13 @@ impl RootCommandGuard {
         claim: &LocalExecutionClaim,
         stdout_file: Option<fs::File>,
     ) -> Result<CommandProcessSettlement, ExecutionFailure> {
+        #[cfg(target_os = "android")]
+        if unsafe { libc::getuid() } != 0 || unsafe { libc::geteuid() } != 0 {
+            return Err(pre_start(DomainError::new(
+                ErrorCode::PermissionDenied,
+                "Magisk command daemon real/effective UID must both be 0",
+            )));
+        }
         if !self.guard_path.is_absolute() || !self.guard_path.is_file() {
             return Err(pre_start(DomainError::new(
                 ErrorCode::CapabilityUnavailable,
@@ -757,6 +764,7 @@ impl RootCommandGuard {
                 stderr: stderr.bytes,
                 stderr_truncated: stderr.truncated,
             },
+            actual_run_as: Some(RunAs::Root),
             cleanup_verified: settlement.cleanup_verified,
         })
     }

@@ -615,6 +615,7 @@ pub struct CommandResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub exit_code: Option<i32>,
     pub requested_run_as: RunAs,
+    /// Identity attested by the executor's OS-identity gate after launch.
     pub actual_run_as: RunAs,
     pub execution_class: ExecutionClass,
     pub duration_ms: u64,

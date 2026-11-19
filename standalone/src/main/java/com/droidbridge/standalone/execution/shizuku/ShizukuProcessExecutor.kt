@@ -22,15 +22,23 @@ internal class ShizukuProcessExecutor(
             guardPath,
             packageName,
         )
-        return AndroidExecutionResult(
-            guardExecutor.execute(
-                candidate,
-                request,
-                request.executionId,
-                invocation.primitive,
-                invocation.payload,
-            ).toString().toByteArray(),
+        if (invocation.primitive == "process_start" &&
+            !ShizukuLaunchPolicy.isShellUid(candidate.remote.uid)
+        ) {
+            // Verify the remote UserService's OS identity, not this App-side process UID.
+            throw ShizukuExecutionException("PERMISSION_DENIED")
+        }
+        val result = guardExecutor.execute(
+            candidate,
+            request,
+            request.executionId,
+            invocation.primitive,
+            invocation.payload,
         )
+        if (invocation.primitive == "process_start") {
+            result.put("actual_run_as", "shell")
+        }
+        return AndroidExecutionResult(result.toString().toByteArray())
     }
 
     fun cancel(

@@ -241,9 +241,10 @@ fn outcome(cause: CommandProcessCause, exit_code: Option<i32>) -> CommandProcess
     }
 }
 
-fn exited(exit_code: i32) -> CommandProcessSettlement {
+fn exited(run_as: RunAs, exit_code: i32) -> CommandProcessSettlement {
     CommandProcessSettlement {
         outcome: outcome(CommandProcessCause::Exited, Some(exit_code)),
+        actual_run_as: Some(run_as),
         cleanup_verified: true,
     }
 }
@@ -405,6 +406,25 @@ fn without_identity(mut value: serde_json::Value) -> serde_json::Value {
     value
 }
 
+/// An executor must attest the identity it actually launched; missing or mismatched
+/// evidence is rejected rather than copied from the request.
+#[tokio::test]
+async fn i8_cmd_rejects_missing_or_mismatched_identity_attestation() {
+    let facts = apk_facts(APK_INSTANCE);
+    for attested in [None, Some(RunAs::Root)] {
+        let port = ScriptedPort::new();
+        let mut settlement = exited(RunAs::App, 0);
+        settlement.actual_run_as = attested;
+        port.script(RunAs::App, Ok(settlement));
+        let runner = surface(apk_capabilities(), &APK_IDENTITIES, port);
+        let call = run_call(RunAs::App, false);
+        let failure = start(&runner, admitted(facts, &call, 90))
+            .await
+            .unwrap_err();
+        assert_eq!(failure.error.code, ErrorCode::PermissionDenied);
+    }
+}
+
 /// Gate 01: both host Command surfaces project one public result and error semantics.
 #[tokio::test]
 async fn i8_cmd_g01_both_host_surfaces_share_one_public_result_and_error_semantics() {
@@ -412,13 +432,14 @@ async fn i8_cmd_g01_both_host_surfaces_share_one_public_result_and_error_semanti
     let magisk = magisk_facts(MAGISK_INSTANCE);
 
     let scripted_cases = [
-        (RunAs::App, exited(0)),
-        (RunAs::Shell, exited(0)),
-        (RunAs::App, exited(7)),
+        (RunAs::App, exited(RunAs::App, 0)),
+        (RunAs::Shell, exited(RunAs::Shell, 0)),
+        (RunAs::App, exited(RunAs::App, 7)),
         (
             RunAs::Shell,
             CommandProcessSettlement {
                 outcome: outcome(CommandProcessCause::Timeout, None),
+                actual_run_as: Some(RunAs::Shell),
                 cleanup_verified: true,
             },
         ),
@@ -427,7 +448,9 @@ async fn i8_cmd_g01_both_host_surfaces_share_one_public_result_and_error_semanti
         let apk_port = ScriptedPort::new();
         apk_port.script(run_as, Ok(scripted.clone()));
         let magisk_port = ScriptedPort::new();
-        magisk_port.script(RunAs::Root, Ok(scripted.clone()));
+        let mut magisk_settlement = scripted.clone();
+        magisk_settlement.actual_run_as = Some(RunAs::Root);
+        magisk_port.script(RunAs::Root, Ok(magisk_settlement));
 
         let call = run_call(run_as, false);
         let root_call = run_call(RunAs::Root, false);
@@ -502,6 +525,7 @@ async fn i8_cmd_g01_both_host_surfaces_share_one_public_result_and_error_semanti
         for cause in unverified_causes {
             let unverified = CommandProcessSettlement {
                 outcome: outcome(cause, (cause == CommandProcessCause::Exited).then_some(0)),
+                actual_run_as: Some(run_as),
                 cleanup_verified: false,
             };
             let apk_port = ScriptedPort::new();
@@ -526,6 +550,7 @@ async fn i8_cmd_g01_both_host_surfaces_share_one_public_result_and_error_semanti
         // same cancellation and carry the same cleanup uncertainty with it.
         let unverified = CommandProcessSettlement {
             outcome: outcome(CommandProcessCause::Cancelled, None),
+            actual_run_as: Some(run_as),
             cleanup_verified: false,
         };
         let apk_port = ScriptedPort::new();
@@ -560,7 +585,7 @@ async fn i8_cmd_g01_both_host_surfaces_share_one_public_result_and_error_semanti
         ErrorCode::InvalidArgument
     );
     let probing = ScriptedPort::new();
-    probing.script(RunAs::App, Ok(exited(0)));
+    probing.script(RunAs::App, Ok(exited(RunAs::App, 0)));
     let apk_surface = surface(apk_capabilities(), &APK_IDENTITIES, probing.clone());
     let failure = start(&apk_surface, admitted(apk, &invalid, 5))
         .await
@@ -571,7 +596,7 @@ async fn i8_cmd_g01_both_host_surfaces_share_one_public_result_and_error_semanti
 
     // `as_task=true` keeps the complete R-CMD-006 result inside the Task terminal shape.
     let port = ScriptedPort::new();
-    port.script(RunAs::App, Ok(exited(3)));
+    port.script(RunAs::App, Ok(exited(RunAs::App, 3)));
     let task_call = run_call(RunAs::App, true);
     let apk_surface = surface(apk_capabilities(), &APK_IDENTITIES, port);
     let mut execution = admitted(apk, &task_call, 6);
@@ -621,7 +646,7 @@ async fn i8_cmd_g02_requested_and_actual_identity_are_exact_on_each_surface() {
             provider_generation(facts, provider)
         );
         let port = ScriptedPort::new();
-        port.script(run_as, Ok(exited(0)));
+        port.script(run_as, Ok(exited(run_as, 0)));
         let runner = surface(capabilities_of(facts), identities_of(facts), port.clone());
         let result = public_result(&start(&runner, execution).await.unwrap()).clone();
         assert_eq!(result["requested_run_as"], identity);
@@ -643,7 +668,7 @@ async fn i8_cmd_g02_requested_and_actual_identity_are_exact_on_each_surface() {
     // `root` is unavailable on the APK surface, and it is refused rather than falling
     // through to another identity.
     let apk_port = ScriptedPort::new();
-    apk_port.script(RunAs::Root, Ok(exited(0)));
+    apk_port.script(RunAs::Root, Ok(exited(RunAs::Root, 0)));
     let root_call = run_call(RunAs::Root, false);
     assert_eq!(
         command_executor_request(&capability(apk), &root_call)
@@ -690,8 +715,8 @@ async fn i8_cmd_g02_requested_and_actual_identity_are_exact_on_each_surface() {
     ];
     for (facts, call, provider, instance) in mismatches {
         let port = ScriptedPort::new();
-        port.script(call_run_as(&call), Ok(exited(0)));
-        port.script(RunAs::Root, Ok(exited(0)));
+        port.script(call_run_as(&call), Ok(exited(call_run_as(&call), 0)));
+        port.script(RunAs::Root, Ok(exited(RunAs::Root, 0)));
         let runner = surface(capabilities_of(facts), identities_of(facts), port.clone());
         let execution = mismatched(facts, &call, provider, instance);
         let failure = start(&runner, execution).await.unwrap_err();
@@ -768,8 +793,8 @@ async fn i8_cmd_g03_shizuku_is_only_the_apk_surfaces_shell_primitive_provider() 
     ];
     for (facts, call, provider, instance) in wrong_identities {
         let port = ScriptedPort::new();
-        port.script(RunAs::Root, Ok(exited(0)));
-        port.script(RunAs::Shell, Ok(exited(0)));
+        port.script(RunAs::Root, Ok(exited(RunAs::Root, 0)));
+        port.script(RunAs::Shell, Ok(exited(RunAs::Shell, 0)));
         let runner = surface(capabilities_of(facts), identities_of(facts), port.clone());
         let execution = mismatched(facts, &call, provider, instance);
         let failure = start(&runner, execution).await.unwrap_err();
@@ -780,7 +805,7 @@ async fn i8_cmd_g03_shizuku_is_only_the_apk_surfaces_shell_primitive_provider() 
     // The Shizuku provider's generation is the one the resolver published for it, so a
     // stale `shizuku.shell` generation is stale authority rather than a fresh primitive.
     let port = ScriptedPort::new();
-    port.script(RunAs::Shell, Ok(exited(0)));
+    port.script(RunAs::Shell, Ok(exited(RunAs::Shell, 0)));
     let mut stale = capability(apk);
     stale.resolver_facts.generations.shizuku += 1;
     let runner = surface(FakeCapabilities::new(stale), &APK_IDENTITIES, port.clone());
@@ -920,6 +945,7 @@ async fn i8_cmd_g04_retained_output_has_one_artifact_owner_beyond_the_inline_bou
                     stderr: long_stderr.clone(),
                     stderr_truncated: true,
                 },
+                actual_run_as: Some(native_identity(facts)),
                 cleanup_verified: true,
             }),
         );
@@ -971,6 +997,7 @@ async fn i8_cmd_g04_retained_output_has_one_artifact_owner_beyond_the_inline_bou
                 stderr: b"err".to_vec(),
                 stderr_truncated: true,
             },
+            actual_run_as: Some(RunAs::Shell),
             cleanup_verified: true,
         };
         let encoded = AndroidCommandSettlement::encode(&settlement).unwrap();

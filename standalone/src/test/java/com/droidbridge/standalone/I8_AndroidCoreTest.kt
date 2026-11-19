@@ -12,6 +12,7 @@ import com.droidbridge.standalone.execution.android.NotificationPlatform
 import com.droidbridge.standalone.execution.android.NativeAndroidExecutionDispatcher
 import com.droidbridge.standalone.execution.android.ObservedNotification
 import com.droidbridge.standalone.execution.android.VisiblePackageFact
+import com.droidbridge.standalone.execution.shizuku.ShizukuLaunchPolicy
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -23,6 +24,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class I8_AndroidCoreTest {
+    @Test
+    fun I8_ANDROID_G00_shizukuExecutionRequiresTheActualShellUid() {
+        assertTrue(ShizukuLaunchPolicy.isShellUid(2_000))
+        assertTrue(!ShizukuLaunchPolicy.isShellUid(0))
+        assertTrue(!ShizukuLaunchPolicy.isShellUid(10_123))
+    }
+
     private class FakeAccess : AndroidMotherToolAccess {
         val calls = mutableListOf<String>()
         var clipboard: () -> String? = { null }

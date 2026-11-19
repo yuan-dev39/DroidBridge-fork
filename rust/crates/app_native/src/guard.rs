@@ -162,7 +162,7 @@ mod unix {
         ProcFacts, block_guard_termination_signals, clear_cloexec, guard_proof_capacity_available,
         sync_directory,
     };
-    use contract::{ErrorCode, UuidV4};
+    use contract::{ErrorCode, RunAs, UuidV4};
     use domain::DomainError;
     use persistence::{
         GuardIdentity, GuardProofDirectory, GuardProofReader, GuardRecovery, classify_guard_proof,
@@ -336,6 +336,17 @@ mod unix {
             request: CommandProcessRequest,
             claim: &LocalExecutionClaim,
         ) -> Result<CommandProcessSettlement, ExecutionFailure> {
+            #[cfg(target_os = "android")]
+            {
+                let uid = unsafe { libc::getuid() };
+                let euid = unsafe { libc::geteuid() };
+                if uid < 10_000 || uid != euid {
+                    return Err(pre_start(DomainError::new(
+                        ErrorCode::PermissionDenied,
+                        "App command host is not running under its application UID",
+                    )));
+                }
+            }
             let guard_path = self.guard_path().map_err(pre_start)?;
             let (stdout_read, stdout_write) = pipe()?;
             let (stderr_read, stderr_write) = pipe()?;
@@ -471,6 +482,7 @@ mod unix {
                     stderr: stderr.bytes,
                     stderr_truncated: stderr.truncated,
                 },
+                actual_run_as: Some(RunAs::App),
                 cleanup_verified: settlement.cleanup_verified,
             })
         }
