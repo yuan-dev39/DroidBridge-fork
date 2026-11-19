@@ -82,6 +82,8 @@ pub struct CommandProcessRequest {
 #[derive(Clone, Debug, PartialEq)]
 pub struct CommandProcessSettlement {
     pub outcome: CommandProcessOutcome,
+    /// Host-attested identity; never inferred from the request.
+    pub actual_run_as: Option<RunAs>,
     pub cleanup_verified: bool,
 }
 
@@ -123,6 +125,9 @@ pub struct AndroidCommandSettlement {
         skip_serializing_if = "is_verified_cleanup"
     )]
     cleanup_verified: bool,
+    /// Missing evidence is rejected before a successful public result is built.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    actual_run_as: Option<RunAs>,
 }
 
 const fn verified_cleanup() -> bool {
@@ -157,6 +162,7 @@ impl AndroidCommandSettlement {
                 stderr,
                 stderr_truncated: settlement.stderr_truncated,
             },
+            actual_run_as: settlement.actual_run_as,
             cleanup_verified: settlement.cleanup_verified,
         })
     }
@@ -177,6 +183,7 @@ impl AndroidCommandSettlement {
             stderr_base64: BASE64.encode(&settlement.outcome.stderr),
             stderr_truncated: settlement.outcome.stderr_truncated,
             cleanup_verified: settlement.cleanup_verified,
+            actual_run_as: settlement.actual_run_as,
         })
         .map_err(|_| {
             DomainError::new(
