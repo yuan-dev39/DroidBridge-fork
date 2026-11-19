@@ -11,12 +11,9 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Arrangement
 import com.droidbridge.ui.product.mcp.MCP_PROTOCOL_VERSION
-import android.app.LocaleConfig
-import android.app.LocaleManager
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
-import android.os.LocaleList
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.foundation.Image
@@ -77,7 +74,6 @@ import com.droidbridge.ui.common.RouteEmpty
 import com.droidbridge.ui.common.RouteError
 import com.droidbridge.ui.common.RowIcon
 import java.io.File
-import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -157,8 +153,6 @@ fun SettingsRoute(
                 ) { open(SettingsDestination.Data) }
             }
             group(R.string.settings_group_appearance) {
-                LanguageItem()
-                RowDivider()
                 Link(
                     R.string.settings_theme,
                     R.drawable.ic_palette,
@@ -218,92 +212,6 @@ fun SettingsRoute(
             onDismiss = { choosingTheme = false },
         )
     }
-}
-
-/**
- * The language list is the build-generated locale config, so adding a `values-<locale>` resource
- * folder adds a choice. The system stores the per-app locale; an empty list follows the system.
- */
-@Composable
-private fun LanguageItem() {
-    val context = LocalContext.current
-    val localeManager = remember { context.getSystemService(LocaleManager::class.java) }
-    val supported = remember {
-        LocaleConfig(context).takeIf { it.status == LocaleConfig.STATUS_SUCCESS }?.supportedLocales
-    }
-    var current by remember { mutableStateOf(localeManager.applicationLocales.takeUnless { it.isEmpty }?.get(0)) }
-    var choosing by rememberSaveable { mutableStateOf(false) }
-    val systemLabel = stringResource(R.string.language_system)
-    Link(
-        R.string.settings_language,
-        R.drawable.ic_language,
-        "settings:language",
-        when {
-            supported == null -> stringResource(R.string.state_error)
-            else -> current?.let(::languageName) ?: systemLabel
-        },
-        enabled = supported != null,
-    ) { choosing = true }
-    if (choosing && supported != null) {
-        ChoiceDialog(
-            title = R.string.settings_language,
-            tag = "settings:language",
-            options = listOf<Locale?>(null) + List(supported.size()) { supported[it] },
-            selected = current,
-            optionTag = { it?.toLanguageTag() ?: "system" },
-            label = { locale -> locale?.let(::languageName) ?: systemLabel },
-            onSelect = { locale ->
-                localeManager.applicationLocales = locale?.let { LocaleList(it) } ?: LocaleList.getEmptyLocaleList()
-                current = localeManager.applicationLocales.takeUnless { it.isEmpty }?.get(0)
-            },
-            onDismiss = { choosing = false },
-        )
-    }
-}
-
-/** A language is always named in itself, so it stays recognizable whichever language is active. */
-private fun languageName(locale: Locale): String =
-    locale.getDisplayName(locale).replaceFirstChar { it.titlecase(locale) }
-
-@Composable
-private fun <T> ChoiceDialog(
-    @StringRes title: Int,
-    tag: String,
-    options: List<T>,
-    selected: T,
-    optionTag: (T) -> String,
-    label: @Composable (T) -> String,
-    onSelect: (T) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(title)) },
-        text = {
-            Column {
-                options.forEach { value ->
-                    Row(
-                        Modifier.fillMaxWidth().heightIn(min = 56.dp)
-                            .selectable(selected = selected == value, role = Role.RadioButton) {
-                                onDismiss()
-                                onSelect(value)
-                            }
-                            .testTag("$tag:${optionTag(value)}"),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        RadioButton(selected = selected == value, onClick = null)
-                        Text(label(value), Modifier.padding(start = 16.dp))
-                    }
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss, modifier = Modifier.testTag("$tag:cancel")) {
-                Text(stringResource(R.string.action_cancel))
-            }
-        },
-    )
 }
 
 /** What the Settings rows report live: the same facts Home shows, read once by the Main entry. */
