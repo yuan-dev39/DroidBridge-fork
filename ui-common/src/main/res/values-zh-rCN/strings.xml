@@ -149,6 +149,7 @@
     <string name="external_mcp_title">外部 MCP 服务</string>
     <string name="external_mcp_add">添加服务</string>
     <string name="external_mcp_edit">编辑服务</string>
+    <string name="external_mcp_name_hint">使用 1–24 位小写字母、数字、下划线或连字符。该 ID 会作为此服务工具的命名空间前缀。</string>
     <string name="external_mcp_name">服务 ID</string>
     <string name="external_mcp_endpoint">MCP 地址</string>
     <string name="external_mcp_endpoint_hint">HTTP 仅限本机或私有局域网；公网服务请使用 HTTPS。路径必须为 /mcp。</string>
