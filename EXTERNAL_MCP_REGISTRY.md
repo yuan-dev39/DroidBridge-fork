@@ -40,7 +40,7 @@ servers. Invalid or oversized JSON fails closed (no external servers).
 
 ## Network policy and limits
 
-- HTTP is accepted only for loopback, RFC1918 private, link-local, `.local` or `.localhost`
+- HTTP is accepted only for loopback, RFC1918 private or link-local IP addresses, plus reserved `localhost` names
   endpoints. Public HTTP is rejected.
 - HTTPS endpoints are accepted; URL-embedded usernames/passwords, query strings, fragments,
   redirects and non-`/mcp` paths are rejected.
