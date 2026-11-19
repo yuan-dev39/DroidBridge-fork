@@ -28,7 +28,7 @@ Keep DroidBridge's native MCP tools and the existing OpenAI Secure Tunnel unchan
    - Streamable HTTP MCP is implemented. Perform `initialize`, retain the negotiated protocol version and optional `Mcp-Session-Id`, send `notifications/initialized`, then use paginated `tools/list` and `tools/call`. JSON and SSE responses are supported.
    - Do not follow redirects. Bound connect/overall timeouts, response bytes, tool count, and concurrent calls.
    - Never log Authorization headers or credentials.
-   - Endpoint policy: literal loopback or private/link-local IPv4, or loopback/unique-local IPv6, over HTTP only. DNS names, public IPs, HTTPS, URL userinfo, query strings and fragments are rejected. Bearer credentials are permitted only for loopback endpoints, avoiding sending them in cleartext across a LAN. This prevents the root daemon becoming an SSRF proxy.
+   - Endpoint policy: literal loopback or RFC1918 private IPv4, or loopback/unique-local IPv6, over HTTP only. DNS names, public IPs, HTTPS, URL userinfo, query strings and fragments are rejected. Bearer credentials are permitted only for loopback endpoints, avoiding sending them in cleartext across a LAN. This prevents the root daemon becoming an SSRF proxy.
    - A failing service is isolated: native tools and other registered servers remain available. Stdio-only servers and remote HTTPS endpoints are not supported by the current Android HTTP client.
 
 3. **Facade integration**
