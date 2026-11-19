@@ -82,6 +82,8 @@ import com.droidbridge.ui.maintenance.MaintenanceViewModel
 import com.droidbridge.ui.mcp.AgentConnectionRoute
 import com.droidbridge.ui.mcp.McpRoute
 import com.droidbridge.ui.mcp.McpViewModel
+import com.droidbridge.ui.mcp.ExternalMcpRoute
+import com.droidbridge.ui.mcp.ExternalMcpViewModel
 import com.droidbridge.ui.mcp.TunnelRoute
 import com.droidbridge.ui.mcp.TunnelViewModel
 import com.droidbridge.ui.product.about.ProductInfo
@@ -107,6 +109,7 @@ import kotlinx.serialization.Serializable
 @Serializable data class AutomationEditor(val automationId: String? = null) : NavKey
 @Serializable data object AgentConnections : NavKey
 @Serializable data object MCP : NavKey
+@Serializable data object ExternalMCP : NavKey
 @Serializable data object TunnelSetup : NavKey
 @Serializable data object Diagnostics : NavKey
 @Serializable data object Settings : NavKey
@@ -325,6 +328,7 @@ private fun NavigationRoot(state: RootUiState, viewModel: RootViewModel, graph: 
                     viewModel = viewModel { McpViewModel(graph.connection) },
                     openMcp = { backStack.add(MCP) },
                     openTunnel = { backStack.add(TunnelSetup) },
+                    openExternalMcp = { backStack.add(ExternalMCP) },
                 ) { backStack.removeLastOrNull() }
             }
             // The daemon serves MCP and the tunnel itself, so the frontend needs no notification
@@ -335,6 +339,11 @@ private fun NavigationRoot(state: RootUiState, viewModel: RootViewModel, graph: 
                     notificationsUnavailable = false,
                     shouldRequestNotifications = { false },
                     finishSetup = null,
+                ) { backStack.removeLastOrNull() }
+            }
+            entry<ExternalMCP> {
+                ExternalMcpRoute(
+                    viewModel = viewModel { ExternalMcpViewModel(graph.connection) },
                 ) { backStack.removeLastOrNull() }
             }
             entry<TunnelSetup> {
