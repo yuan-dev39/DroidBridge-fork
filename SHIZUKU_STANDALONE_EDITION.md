@@ -17,6 +17,19 @@ The repository already has a `:standalone` Android application module with appli
 
 Important limitation: the current standalone admission policy in `ShizukuContracts.kt` explicitly admits only effective UID 2000. The current standalone Shizuku provider is an ADB-shell execution backend. It is not yet root-equivalent and must not be advertised as such.
 
+## Current implementation status (2026-11-19)
+
+- The standalone Shizuku APK already has a dedicated Gradle application module and does not require the Magisk module to be installed.
+- CI now builds separately named Root debug/stable module ZIPs and a separately named Shizuku debug APK artifact.
+- The standalone Kotlin admission policy and native Rust launcher now recognize UID 0 and UID 2000 as two distinct real execution identities. Unsupported UIDs remain rejected.
+- The controller carries the UserService's observed UID through session state and reports both `uid` and `privilege_mode` from the Shizuku bind primitive.
+- Unit tests cover identity classification, caller UID binding, guard path/resource limits, and capability projection; Rust tests cover native UID admission.
+- These are code-level changes only until CI and a real-device integration run pass. The Shizuku edition must not be described as fully Root-equivalent until a UserService started in UID 0 is verified on-device and privileged shell/filesystem operations are exercised end-to-end.
+
+### Important privilege distinction
+
+The Shizuku APK can offer Root-equivalent execution only when its Shizuku UserService actually runs as UID 0. If the installed Shizuku provider starts it as UID 2000, it remains an ADB-shell backend. Both modes are useful and supported, but the UI and tool responses must always display the measured UID. UID 0 also remains subject to SELinux policy and device-specific restrictions.
+
 ## Target user experience
 
 1. Install `DroidBridge-Shizuku.apk` like any normal APK.
