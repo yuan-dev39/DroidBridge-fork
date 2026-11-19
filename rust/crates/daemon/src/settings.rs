@@ -7,6 +7,7 @@ use base64::Engine as _;
 use contract::ErrorCode;
 use domain::DomainError;
 use serde::{Deserialize, Serialize};
+use runtime::dynamic_mcp::McpServerConfig;
 use std::{
     fs,
     io::{self, Read, Write},
@@ -16,10 +17,11 @@ use std::{
 
 const MCP_FILE: &str = "mcp.json";
 const TUNNEL_FILE: &str = "tunnel.json";
+const MCP_SERVERS_FILE: &str = "mcp-servers.json";
 const SCHEMA_VERSION: u32 = 1;
 const TOKEN_BYTES: usize = 32;
 const MAX_API_KEY_BYTES: usize = 512;
-const MAX_SETTINGS_BYTES: u64 = 4_096;
+const MAX_SETTINGS_BYTES: u64 = 32_768;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -61,6 +63,13 @@ impl TunnelSettings {
     }
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct McpServersSettings {
+    schema_version: u32,
+    servers: Vec<McpServerConfig>,
+}
+
 pub(crate) struct SettingsStore {
     base: PathBuf,
 }
@@ -96,6 +105,24 @@ impl SettingsStore {
 
     pub(crate) fn commit_mcp(&self, settings: &McpSettings) -> Result<(), DomainError> {
         write_settings(&self.base, MCP_FILE, settings)
+    }
+
+    pub(crate) fn mcp_servers(&self) -> Result<Vec<McpServerConfig>, DomainError> {
+        match read_settings::<McpServersSettings>(&self.base.join(MCP_SERVERS_FILE))? {
+            Some(settings) if settings.schema_version == SCHEMA_VERSION && settings.servers.len() <= 16 => Ok(settings.servers),
+            Some(_) => Err(DomainError::new(ErrorCode::IoError, "MCP server settings are invalid")),
+            None => Ok(Vec::new()),
+        }
+    }
+
+    pub(crate) fn commit_mcp_servers(&self, servers: &[McpServerConfig]) -> Result<(), DomainError> {
+        if servers.len() > 16 {
+            return Err(DomainError::new(ErrorCode::ResourceLimit, "too many MCP servers"));
+        }
+        write_settings(&self.base, MCP_SERVERS_FILE, &McpServersSettings {
+            schema_version: SCHEMA_VERSION,
+            servers: servers.to_vec(),
+        })
     }
 
     /// The committed tunnel settings, or none while no tunnel is configured.
