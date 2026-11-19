@@ -190,7 +190,7 @@ fun ExternalMcpRoute(viewModel: ExternalMcpViewModel, back: () -> Unit) {
             onSave = { config, token, clearToken ->
                 val next = state.services.map { it.config }.filterNot { it.name == original?.config?.name }.toMutableList()
                 next += config.copy(bearerToken = token.takeIf { it.isNotBlank() })
-                viewModel.save(next, if (clearToken) setOf(config.name) else emptySet())
+                viewModel.save(next, if (clearToken && token.isBlank()) setOf(config.name) else emptySet())
                 adding = false
                 editing = null
             },
