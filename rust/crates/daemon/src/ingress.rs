@@ -410,17 +410,17 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
             self.product_version.clone(),
             self.dynamic_registry.clone(),
         )
+        .map_err(|_| ())
+        .and_then(|facade| {
+            TunnelClient::new(
+                facade,
+                &settings.tunnel_id,
+                &settings.api_key,
+                &self.product_version,
+            )
             .map_err(|_| ())
-            .and_then(|facade| {
-                TunnelClient::new(
-                    facade,
-                    &settings.tunnel_id,
-                    &settings.api_key,
-                    &self.product_version,
-                )
-                .map_err(|_| ())
-            })
-            .and_then(|client| TunnelRuntime::start(client).map_err(|_| ()));
+        })
+        .and_then(|client| TunnelRuntime::start(client).map_err(|_| ()));
         match started {
             Ok(tunnel) => self.tunnel = Some((tunnel, settings)),
             Err(()) => self.tunnel_failed = true,
