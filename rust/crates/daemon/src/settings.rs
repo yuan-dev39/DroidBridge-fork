@@ -6,8 +6,8 @@
 use base64::Engine as _;
 use contract::ErrorCode;
 use domain::DomainError;
-use serde::{Deserialize, Serialize};
 use runtime::dynamic_mcp::McpServerConfig;
+use serde::{Deserialize, Serialize};
 use std::{
     fs,
     io::{self, Read, Write},
@@ -109,20 +109,37 @@ impl SettingsStore {
 
     pub(crate) fn mcp_servers(&self) -> Result<Vec<McpServerConfig>, DomainError> {
         match read_settings::<McpServersSettings>(&self.base.join(MCP_SERVERS_FILE))? {
-            Some(settings) if settings.schema_version == SCHEMA_VERSION && settings.servers.len() <= 16 => Ok(settings.servers),
-            Some(_) => Err(DomainError::new(ErrorCode::IoError, "MCP server settings are invalid")),
+            Some(settings)
+                if settings.schema_version == SCHEMA_VERSION && settings.servers.len() <= 16 =>
+            {
+                Ok(settings.servers)
+            }
+            Some(_) => Err(DomainError::new(
+                ErrorCode::IoError,
+                "MCP server settings are invalid",
+            )),
             None => Ok(Vec::new()),
         }
     }
 
-    pub(crate) fn commit_mcp_servers(&self, servers: &[McpServerConfig]) -> Result<(), DomainError> {
+    pub(crate) fn commit_mcp_servers(
+        &self,
+        servers: &[McpServerConfig],
+    ) -> Result<(), DomainError> {
         if servers.len() > 16 {
-            return Err(DomainError::new(ErrorCode::ResourceLimit, "too many MCP servers"));
+            return Err(DomainError::new(
+                ErrorCode::ResourceLimit,
+                "too many MCP servers",
+            ));
         }
-        write_settings(&self.base, MCP_SERVERS_FILE, &McpServersSettings {
-            schema_version: SCHEMA_VERSION,
-            servers: servers.to_vec(),
-        })
+        write_settings(
+            &self.base,
+            MCP_SERVERS_FILE,
+            &McpServersSettings {
+                schema_version: SCHEMA_VERSION,
+                servers: servers.to_vec(),
+            },
+        )
     }
 
     /// The committed tunnel settings, or none while no tunnel is configured.

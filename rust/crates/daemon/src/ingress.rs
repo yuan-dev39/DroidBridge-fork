@@ -4,8 +4,8 @@
 //! answers with the committed state.
 
 use crate::settings::{SettingsStore, TunnelSettings, valid_api_key, valid_tunnel_id};
-use runtime::{McpFacade, McpHost, McpListener, TunnelClient, TunnelRuntime};
 use runtime::dynamic_mcp::{DynamicMcpRegistry, McpServerConfig};
+use runtime::{McpFacade, McpHost, McpListener, TunnelClient, TunnelRuntime};
 use serde_json::{Value, json};
 
 const LISTENER_FAILED: &str = "MCP_LISTENER_FAILED";
@@ -271,29 +271,51 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
             payload.get("id").and_then(Value::as_str),
             payload.get("display_name").and_then(Value::as_str),
             payload.get("endpoint").and_then(Value::as_str),
-        ) else { return failure("INVALID_CONFIG"); };
+        ) else {
+            return failure("INVALID_CONFIG");
+        };
         let bearer_token = match payload.get("bearer_token") {
             None | Some(Value::Null) => None,
             Some(Value::String(value)) => Some(value.clone()),
             _ => return failure("INVALID_CONFIG"),
         };
         let config = McpServerConfig {
-            id:id.to_owned(), display_name:display_name.to_owned(), endpoint:endpoint.to_owned(),
-            enabled:payload.get("enabled").and_then(Value::as_bool).unwrap_or(true), bearer_token,
+            id: id.to_owned(),
+            display_name: display_name.to_owned(),
+            endpoint: endpoint.to_owned(),
+            enabled: payload
+                .get("enabled")
+                .and_then(Value::as_bool)
+                .unwrap_or(true),
+            bearer_token,
         };
-        if DynamicMcpRegistry::validate_config(&config).is_err() { return failure("INVALID_CONFIG"); }
-        let mut configs = match self.dynamic_registry.configs() { Ok(value) => value, Err(_) => return failure("REGISTRY_UNAVAILABLE") };
+        if DynamicMcpRegistry::validate_config(&config).is_err() {
+            return failure("INVALID_CONFIG");
+        }
+        let mut configs = match self.dynamic_registry.configs() {
+            Ok(value) => value,
+            Err(_) => return failure("REGISTRY_UNAVAILABLE"),
+        };
         configs.retain(|current| current.id != config.id);
         configs.push(config.clone());
-        if self.settings.commit_mcp_servers(&configs).is_err() { return failure("IO_ERROR"); }
-        if self.dynamic_registry.upsert(config).is_err() { return failure("INVALID_CONFIG"); }
+        if self.settings.commit_mcp_servers(&configs).is_err() {
+            return failure("IO_ERROR");
+        }
+        if self.dynamic_registry.upsert(config).is_err() {
+            return failure("INVALID_CONFIG");
+        }
         self.mcp_server_refresh(id)
     }
 
     pub(crate) fn mcp_server_remove(&mut self, id: &str) -> Value {
-        let mut configs = match self.dynamic_registry.configs() { Ok(value) => value, Err(_) => return failure("REGISTRY_UNAVAILABLE") };
+        let mut configs = match self.dynamic_registry.configs() {
+            Ok(value) => value,
+            Err(_) => return failure("REGISTRY_UNAVAILABLE"),
+        };
         configs.retain(|config| config.id != id);
-        if self.settings.commit_mcp_servers(&configs).is_err() { return failure("IO_ERROR"); }
+        if self.settings.commit_mcp_servers(&configs).is_err() {
+            return failure("IO_ERROR");
+        }
         match self.dynamic_registry.remove(id) {
             Ok(()) => self.mcp_servers_list(),
             Err(_) => failure("REGISTRY_UNAVAILABLE"),
@@ -301,10 +323,17 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
     }
 
     pub(crate) fn mcp_server_set_enabled(&mut self, id: &str, enabled: bool) -> Value {
-        let mut configs = match self.dynamic_registry.configs() { Ok(value) => value, Err(_) => return failure("REGISTRY_UNAVAILABLE") };
-        let Some(config) = configs.iter_mut().find(|config| config.id == id) else { return failure("UNKNOWN_SERVER"); };
+        let mut configs = match self.dynamic_registry.configs() {
+            Ok(value) => value,
+            Err(_) => return failure("REGISTRY_UNAVAILABLE"),
+        };
+        let Some(config) = configs.iter_mut().find(|config| config.id == id) else {
+            return failure("UNKNOWN_SERVER");
+        };
         config.enabled = enabled;
-        if self.settings.commit_mcp_servers(&configs).is_err() { return failure("IO_ERROR"); }
+        if self.settings.commit_mcp_servers(&configs).is_err() {
+            return failure("IO_ERROR");
+        }
         match self.dynamic_registry.set_enabled(id, enabled) {
             Ok(()) => self.mcp_servers_list(),
             Err(_) => failure("UNKNOWN_SERVER"),
@@ -313,12 +342,18 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
 
     pub(crate) fn mcp_server_refresh(&mut self, id: &str) -> Value {
         let registry = self.dynamic_registry.clone();
-        let result = tokio::runtime::Builder::new_current_thread().enable_all().build()
+        let result = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
             .map_err(|_| ())
             .and_then(|runtime| runtime.block_on(registry.refresh(id)).map_err(|_| ()));
         match result {
-            Ok(count) => json!({"schema_version":1,"refreshed":true,"tool_count":count,"servers":self.mcp_servers_list()["servers"]}),
-            Err(()) => json!({"schema_version":1,"refreshed":false,"error":"UPSTREAM_UNAVAILABLE","servers":self.mcp_servers_list()["servers"]}),
+            Ok(count) => {
+                json!({"schema_version":1,"refreshed":true,"tool_count":count,"servers":self.mcp_servers_list()["servers"]})
+            }
+            Err(()) => {
+                json!({"schema_version":1,"refreshed":false,"error":"UPSTREAM_UNAVAILABLE","servers":self.mcp_servers_list()["servers"]})
+            }
         }
     }
 
@@ -342,8 +377,12 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
             }
             self.stop_listener();
         }
-        let started = McpFacade::new_with_registry(host, self.product_version.clone(), self.dynamic_registry.clone())
-            .and_then(|facade| McpListener::start(self.port, token.clone(), facade));
+        let started = McpFacade::new_with_registry(
+            host,
+            self.product_version.clone(),
+            self.dynamic_registry.clone(),
+        )
+        .and_then(|facade| McpListener::start(self.port, token.clone(), facade));
         match started {
             Ok(listener) => {
                 self.listener = Some((listener, token));

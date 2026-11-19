@@ -265,12 +265,16 @@ impl Daemon {
             "mcp_settings" => Ok(self.ingress().mcp_settings()),
             "mcp_servers_list" => Ok(self.ingress().mcp_servers_list()),
             "mcp_server_add" => Ok(self.ingress().mcp_server_add(payload)),
-            "mcp_server_remove" => text("id").map(|id| self.ingress().mcp_server_remove(id)).ok_or_else(invalid_payload),
+            "mcp_server_remove" => text("id")
+                .map(|id| self.ingress().mcp_server_remove(id))
+                .ok_or_else(invalid_payload),
             "mcp_server_set_enabled" => match (text("id"), flag("enabled")) {
                 (Some(id), Some(enabled)) => Ok(self.ingress().mcp_server_set_enabled(id, enabled)),
                 _ => Err(invalid_payload()),
             },
-            "mcp_server_refresh" => text("id").map(|id| self.ingress().mcp_server_refresh(id)).ok_or_else(invalid_payload),
+            "mcp_server_refresh" => text("id")
+                .map(|id| self.ingress().mcp_server_refresh(id))
+                .ok_or_else(invalid_payload),
 
             "mcp_set_enabled" => flag("enabled")
                 .map(|enabled| self.ingress().mcp_set_enabled(enabled))

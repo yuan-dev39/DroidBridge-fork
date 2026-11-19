@@ -2,6 +2,7 @@
 //! that frames them; initialization-based clients of the 2025 revisions are served alongside. The facade owns no Task, Automation, capability or host truth: every tool call
 //! and resource query goes to the currently authoritative Runtime through [`McpHost`].
 
+use crate::dynamic_mcp::DynamicMcpRegistry;
 use crate::{PortFuture, command::new_uuid};
 use base64::{
     Engine,
@@ -11,7 +12,6 @@ use contract::{ErrorCode, PublicPayload, RequestId};
 use domain::DomainError;
 use serde_json::{Map, Value, json};
 use std::{collections::BTreeSet, io::Read};
-use crate::dynamic_mcp::DynamicMcpRegistry;
 
 pub const MCP_PROTOCOL_VERSION: &str = "2026-07-28";
 /// The initialization-based revisions the same endpoint also serves, newest first (a dual-era
@@ -434,9 +434,17 @@ impl<H: McpHost> McpFacade<H> {
         dynamic: DynamicMcpRegistry,
     ) -> Result<Self, DomainError> {
         if product_version.is_empty() {
-            return Err(DomainError::new(ErrorCode::InvalidArgument, "MCP product version is empty"));
+            return Err(DomainError::new(
+                ErrorCode::InvalidArgument,
+                "MCP product version is empty",
+            ));
         }
-        Ok(Self { host, product_version, tools: tool_definitions()?, dynamic })
+        Ok(Self {
+            host,
+            product_version,
+            tools: tool_definitions()?,
+            dynamic,
+        })
     }
 
     /// Handles one HTTP request against the token currently committed by the settings owner.
@@ -673,14 +681,22 @@ impl<H: McpHost> McpFacade<H> {
             };
             let arguments = Value::Object(arguments.clone());
             let response = match self.dynamic.call(name, arguments).await {
-                Ok(result) => rpc_result(id, json!({
-                    "resultType":"complete",
-                    "content": result.get("content").cloned().unwrap_or_else(|| json!([])),
-                    "structuredContent": result.get("structuredContent").cloned().unwrap_or(result.clone()),
-                    "isError": result.get("isError").and_then(Value::as_bool).unwrap_or(false),
-                    "_meta": self.server_meta(),
-                })),
-                Err(_) => self.tool_failure(id, name, ErrorCode::CapabilityUnavailable, "the registered MCP server could not complete this tool call"),
+                Ok(result) => rpc_result(
+                    id,
+                    json!({
+                        "resultType":"complete",
+                        "content": result.get("content").cloned().unwrap_or_else(|| json!([])),
+                        "structuredContent": result.get("structuredContent").cloned().unwrap_or(result.clone()),
+                        "isError": result.get("isError").and_then(Value::as_bool).unwrap_or(false),
+                        "_meta": self.server_meta(),
+                    }),
+                ),
+                Err(_) => self.tool_failure(
+                    id,
+                    name,
+                    ErrorCode::CapabilityUnavailable,
+                    "the registered MCP server could not complete this tool call",
+                ),
             };
             return response;
         }
