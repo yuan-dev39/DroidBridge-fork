@@ -263,6 +263,16 @@ impl Daemon {
             "status" => Ok(self.status()),
             "submit" => self.submit(payload),
             "mcp_settings" => Ok(self.ingress().mcp_settings()),
+            "mcp_lan_settings" => Ok(self.ingress().mcp_lan_settings()),
+            "mcp_lan_set_enabled" => flag("enabled")
+                .map(|enabled| self.ingress().mcp_lan_set_enabled(enabled))
+                .ok_or_else(invalid_payload),
+            "mcp_lan_set_port" => payload.get("port").and_then(Value::as_u64)
+                .and_then(|port| u16::try_from(port).ok())
+                .map(|port| self.ingress().mcp_lan_set_port(port))
+                .ok_or_else(invalid_payload),
+            "mcp_lan_rotate_token" => Ok(self.ingress().mcp_lan_rotate()),
+            "mcp_lan_reveal_token" => Ok(self.ingress().mcp_lan_reveal()),
             "mcp_servers_list" => Ok(self.ingress().mcp_servers_list()),
             "mcp_server_add" => Ok(self.ingress().mcp_server_add(payload)),
             "mcp_server_remove" => text("id")
