@@ -422,4 +422,18 @@
     <string name="mcp_servers_removed">服务已删除</string>
     <string name="mcp_servers_remove_failed">删除失败</string>
     <string name="mcp_servers_remove">删除</string>
+
+    <string name="mcp_lan_title">局域网共享 MCP 工具</string>
+    <string name="mcp_lan_description">将本设备聚合的 MCP 工具提供给可信局域网 Agent。默认关闭，始终要求 Bearer Token 认证。</string>
+    <string name="mcp_lan_status">局域网监听：%1$s</string>
+    <string name="mcp_lan_port">局域网端口</string>
+    <string name="mcp_lan_endpoint">MCP 地址：%1$s</string>
+    <string name="mcp_lan_no_address">请先连接 Wi-Fi，以获取本机局域网地址。</string>
+    <string name="mcp_lan_enable">开启局域网共享</string>
+    <string name="mcp_lan_disable">关闭局域网共享</string>
+    <string name="mcp_lan_apply_port">应用端口</string>
+    <string name="mcp_lan_reveal_token">显示访问令牌</string>
+    <string name="mcp_lan_rotate_token">轮换访问令牌</string>
+    <string name="mcp_lan_private_only">仅接受私有/本机网络连接。请勿在路由器上转发此端口，也不要将其暴露到互联网。</string>
+    <string name="mcp_lan_token">局域网 Bearer Token</string>
 </resources>
