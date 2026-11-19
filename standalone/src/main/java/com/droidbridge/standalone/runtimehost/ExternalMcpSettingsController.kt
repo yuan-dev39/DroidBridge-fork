@@ -110,8 +110,8 @@ internal class ExternalMcpSettingsController(
 
         val applied = registry.replace(encoded)
         if (applied != OK) {
-            rollbackFile(oldBytes)
-            return errorReply(applied)
+            val rolledBack = rollbackFile(oldBytes)
+            return errorReply(if (rolledBack) applied else PERSISTENCE_FAILED)
         }
         startupFailure = null
         JSONObject()
@@ -180,16 +180,15 @@ internal class ExternalMcpSettingsController(
         return incoming
     }
 
-    private fun rollbackFile(previousBytes: ByteArray?) {
+    private fun rollbackFile(previousBytes: ByteArray?): Boolean =
         runCatching {
             if (previousBytes == null) {
                 if (file.exists() && !file.delete()) error("cannot remove failed snapshot")
-                fileSystem.syncDirectory(checkNotNull(file.parentFile))
+                file.parentFile?.takeIf { it.exists() }?.let(fileSystem::syncDirectory)
             } else {
                 writeBytesAtomically(previousBytes)
             }
-        }
-    }
+        }.isSuccess
 
     private fun writeEncrypted(raw: String) {
         val cipher = Cipher.getInstance(TRANSFORMATION)
