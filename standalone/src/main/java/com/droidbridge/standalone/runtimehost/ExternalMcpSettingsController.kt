@@ -2,7 +2,6 @@ package com.droidbridge.standalone.runtimehost
 
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
-import android.system.Os
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
@@ -208,7 +207,7 @@ internal class ExternalMcpSettingsController(
         val temporary = File(directory, "$FILE_NAME.tmp")
         try {
             FileOutputStream(temporary).use { output ->
-                Os.chmod(temporary.absolutePath, OWNER_ONLY_MODE)
+                fileSystem.restrictToOwner(temporary)
                 output.write(bytes)
                 output.fd.sync()
             }
@@ -260,7 +259,6 @@ internal class ExternalMcpSettingsController(
         const val TAG_BITS = 128
         const val MAX_CONFIG_CHARS = 65_536
         const val MAX_ENCRYPTED_BYTES = 70_000
-        const val OWNER_ONLY_MODE = 0b110_000_000
         const val OK = "OK"
         const val INVALID_CONFIG = "INVALID_CONFIG"
         const val PERSISTENCE_FAILED = "PERSISTENCE_FAILED"
