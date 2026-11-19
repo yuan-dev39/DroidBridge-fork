@@ -5,6 +5,7 @@ import androidx.annotation.StringRes
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -37,6 +38,7 @@ fun AgentConnectionRoute(
     viewModel: McpViewModel,
     openMcp: () -> Unit,
     openTunnel: () -> Unit,
+    openServers: () -> Unit = {},
     back: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -72,6 +74,11 @@ fun AgentConnectionRoute(
             }
             item { WayRow(R.string.home_mcp, R.drawable.ic_lan, mcpLabel, "agent:local_mcp", openMcp) }
             item { WayRow(R.string.mcp_chatgpt_connection, R.drawable.ic_cloud, tunnelLabel, "agent:chatgpt", openTunnel) }
+            item {
+                Button(onClick = openServers, modifier = Modifier.padding(16.dp)) {
+                    Text("Manage MCP servers")
+                }
+            }
         }
     }
     LaunchedEffect(Unit) { viewModel.refresh() }
