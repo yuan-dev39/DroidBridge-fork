@@ -23,9 +23,9 @@ internal class ShizukuProcessExecutor(
             packageName,
         )
         if (invocation.primitive == "process_start" &&
-            android.os.Process.myUid() != 2_000
+            !ShizukuLaunchPolicy.isShellUid(candidate.remote.uid)
         ) {
-            // Reject before any command can start. Native launch independently checks geteuid().
+            // Verify the remote UserService's OS identity, not this App-side process UID.
             throw ShizukuExecutionException("PERMISSION_DENIED")
         }
         val result = guardExecutor.execute(
