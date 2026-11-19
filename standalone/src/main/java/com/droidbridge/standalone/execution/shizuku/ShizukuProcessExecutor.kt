@@ -22,6 +22,12 @@ internal class ShizukuProcessExecutor(
             guardPath,
             packageName,
         )
+        if (invocation.primitive == "process_start" &&
+            android.os.Process.myUid() != 2_000
+        ) {
+            // Reject before any command can start. Native launch independently checks geteuid().
+            throw ShizukuExecutionException("PERMISSION_DENIED")
+        }
         val result = guardExecutor.execute(
             candidate,
             request,
@@ -30,11 +36,6 @@ internal class ShizukuProcessExecutor(
             invocation.payload,
         )
         if (invocation.primitive == "process_start") {
-            // The UserService process and its guarded child inherit Shizuku's shell UID.
-            // Native launch independently rejects any caller whose effective UID is not 2000.
-            if (android.os.Process.myUid() != 2_000) {
-                throw ShizukuExecutionException("PERMISSION_DENIED")
-            }
             result.put("actual_run_as", "shell")
         }
         return AndroidExecutionResult(result.toString().toByteArray())
