@@ -52,6 +52,8 @@ jobs:
           test -n "$SDKMANAGER"
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" "ndk;29.0.14206865"
+      - name: Install cargo-ndk required by the Android Gradle native build
+        run: cargo install cargo-ndk --locked
       - name: Generate reviewable Gradle verification metadata and compile Kotlin
         run: |
           sed -i 's/compileSdk = 37/compileSdk = 36/; s/targetSdk = 37/targetSdk = 36/' standalone/build.gradle.kts
