@@ -47,6 +47,11 @@ jobs:
           SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)"
           test -n "$SDKMANAGER"
           yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" --channel=3 "platforms;android-37" "build-tools;36.0.0"
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
       - name: Compile standalone Kotlin sources
-        run: ./gradlew :standalone:compileDebugKotlin
+        run: |
+          # API 37 is not published in the runner's SDK repository yet. Compile the
+          # Kotlin source against the latest available stable platform without
+          # changing the checked-in product SDK settings.
+          sed -i 's/compileSdk = 37/compileSdk = 36/; s/targetSdk = 37/targetSdk = 36/' standalone/build.gradle.kts
+          ./gradlew :standalone:compileDebugKotlin
