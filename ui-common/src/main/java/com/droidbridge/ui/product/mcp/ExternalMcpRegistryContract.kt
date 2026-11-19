@@ -45,7 +45,7 @@ object ExternalMcpRegistryContract {
             if (token != null && (
                     token.length > MAX_BEARER_TOKEN_LENGTH ||
                         token.isEmpty() ||
-                        token.any { it == '\\r' || it == '\\n' }
+                        token.any { it == '\r' || it == '\n' }
                 )
             ) return ValidationError(index, "INVALID_BEARER_TOKEN")
         }
