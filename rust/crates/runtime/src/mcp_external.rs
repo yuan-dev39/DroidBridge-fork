@@ -17,6 +17,7 @@ const CACHE_TTL: Duration = Duration::from_secs(15);
 const MAX_RESPONSE_BYTES: usize = 2 * 1024 * 1024;
 const MAX_SERVERS: usize = 16;
 const MAX_TOOLS_PER_SERVER: usize = 64;
+const MAX_REMOTE_TOOL_NAME_BYTES: usize = 96;
 const MAX_TOTAL_EXTERNAL_TOOLS: usize = 128;
 
 #[derive(Debug, Deserialize)]
@@ -171,7 +172,7 @@ impl ExternalMcpServer {
     }
 
     async fn call(&self, tool_name: &str, arguments: Value) -> Result<Value, String> {
-        if tool_name.is_empty() || tool_name.len() > 128 {
+        if !valid_remote_tool_name(tool_name) {
             return Err("remote tool name is invalid".to_owned());
         }
         let mut state = self.state.lock().await;
@@ -338,10 +339,16 @@ fn safe_endpoint(raw: &str) -> Option<Url> {
     private_http.then_some(url)
 }
 
+fn valid_remote_tool_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= MAX_REMOTE_TOOL_NAME_BYTES
+        && name.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
+}
+
 fn namespace_tools(service: &str, tools: &[Value]) -> Vec<Value> {
     tools.iter().filter_map(|tool| {
         let name = tool.get("name")?.as_str()?;
-        if name.is_empty() || name.len() > 128 || name.contains("__") {
+        if !valid_remote_tool_name(name) || name.contains("__") {
             return None;
         }
         let mut tool = tool.clone();
