@@ -3,7 +3,6 @@ package com.droidbridge.standalone.runtimehost
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.system.Os
-import android.system.OsConstants
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
@@ -98,7 +97,8 @@ internal class ExternalMcpSettingsController(
         }
         val effective = mergeSavedCredentials(incoming, previous)
         val encoded = effective.toString()
-        val oldBytes = runCatching { if (file.exists()) file.readBytes() else null }.getOrNull()
+        val oldBytes = runCatching { if (file.exists()) file.readBytes() else null }
+            .getOrElse { return errorReply(PERSISTENCE_FAILED) }
         val persisted = runCatching { writeEncrypted(encoded) }.isSuccess
         if (!persisted) return errorReply(PERSISTENCE_FAILED)
 
