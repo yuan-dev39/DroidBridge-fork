@@ -581,12 +581,7 @@ impl MagiskHost {
         if self.android_grants_probed_at.elapsed() >= Duration::from_secs(5) {
             self.android_grants_probed_at = Instant::now();
             let generation = self.android_grant_generation.advance()?;
-            publish_android_grants(
-                &self.vertical,
-                &self.frontend_package,
-                sdk_int,
-                generation,
-            )?;
+            publish_android_grants(&self.vertical, &self.frontend_package, sdk_int, generation)?;
         }
         let scheduler_faulted = match self.automation_fault.lock() {
             Ok(fault) => fault.is_some(),
@@ -1188,7 +1183,13 @@ fn publish_android_grants(
         vertical,
         "android.local_network",
         local_network.map_or(CapabilityState::Unknown, capability_state),
-        if local_network == Some(false) { Some("LOCAL_NETWORK_PERMISSION_REQUIRED") } else if local_network.is_none() { Some("PROBE_FAILED") } else { None },
+        if local_network == Some(false) {
+            Some("LOCAL_NETWORK_PERMISSION_REQUIRED")
+        } else if local_network.is_none() {
+            Some("PROBE_FAILED")
+        } else {
+            None
+        },
         false,
         generation,
     )?;
@@ -1259,9 +1260,11 @@ fn secure_setting_contains(name: &str, package: &str) -> Option<bool> {
         return None;
     }
     let value = String::from_utf8_lossy(&output.stdout);
-    Some(value.split(':').any(|component| {
-        component.trim().starts_with(&format!("{package}/"))
-    }))
+    Some(
+        value
+            .split(':')
+            .any(|component| component.trim().starts_with(&format!("{package}/"))),
+    )
 }
 
 fn package_permission(package: &str, permission: &str) -> Option<bool> {
@@ -1288,10 +1291,7 @@ fn media_projection_active(package: &str) -> Option<bool> {
         return None;
     }
     let state = String::from_utf8_lossy(&output.stdout);
-    let active = state
-        .split("History")
-        .next()
-        .unwrap_or(&state);
+    let active = state.split("History").next().unwrap_or(&state);
     Some(active.contains(package))
 }
 
