@@ -26,13 +26,21 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - uses: android-actions/setup-android@v3
-
-      - name: Install Android SDK packages
+      - name: Locate and install Android SDK packages
         shell: pwsh
         run: |
-          sdkmanager --install "platforms;android-37" "build-tools;36.0.0" "ndk;29.0.14206865"
-          sdkmanager --licenses | Out-Null
+          $sdkRoot = $env:ANDROID_HOME
+          if ([string]::IsNullOrWhiteSpace($sdkRoot)) { $sdkRoot = $env:ANDROID_SDK_ROOT }
+          if ([string]::IsNullOrWhiteSpace($sdkRoot)) { $sdkRoot = "C:\Android\android-sdk" }
+          $sdkManager = Get-ChildItem (Join-Path $sdkRoot "cmdline-tools") -Filter "sdkmanager.bat" -Recurse |
+            Sort-Object FullName | Select-Object -Last 1
+          if ($null -eq $sdkManager) { throw "Android SDK command-line tools not found under $sdkRoot" }
+          "ANDROID_HOME=$sdkRoot" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "ANDROID_SDK_ROOT=$sdkRoot" | Out-File -FilePath $env:GITHUB_ENV -Append
+          1..100 | ForEach-Object { "y" } | & $sdkManager.FullName --licenses
+          if ($LASTEXITCODE -ne 0) { throw "Android SDK license acceptance failed" }
+          & $sdkManager.FullName --install "platforms;android-37" "build-tools;36.0.0" "ndk;29.0.14206865"
+          if ($LASTEXITCODE -ne 0) { throw "Android SDK package installation failed" }
 
       - uses: dtolnay/rust-toolchain@stable
         with:
