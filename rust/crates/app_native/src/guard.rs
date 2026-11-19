@@ -4,7 +4,7 @@
 //! that admitted it. The APK Runtime host writes those proofs under one scope, so a
 //! guarded command has a single proof-ownership path (S-AUTH-CMD-001, S-EXEC-001).
 
-use contract::{ErrorCode, UuidV4};
+use contract::{ErrorCode, RunAs, UuidV4};
 use domain::DomainError;
 use serde::Serialize;
 use std::{
@@ -471,6 +471,7 @@ mod unix {
                     stderr: stderr.bytes,
                     stderr_truncated: stderr.truncated,
                 },
+                actual_run_as: Some(RunAs::App),
                 cleanup_verified: settlement.cleanup_verified,
             })
         }
