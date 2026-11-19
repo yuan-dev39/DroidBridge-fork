@@ -160,16 +160,17 @@ impl ExternalMcpRegistry {
         let (server_name, tool_name) = qualified_name
             .split_once("__")
             .ok_or_else(|| "external tool name has no service namespace".to_owned())?;
-        let servers = self
-            .servers
-            .read()
-            .map_err(|_| "external MCP registry is unavailable".to_owned())?;
-        let server = servers
-            .iter()
-            .find(|server| server.name == server_name)
-            .cloned()
-            .ok_or_else(|| "external MCP service is not configured".to_owned())?;
-        drop(servers);
+        let server = {
+            let servers = self
+                .servers
+                .read()
+                .map_err(|_| "external MCP registry is unavailable".to_owned())?;
+            servers
+                .iter()
+                .find(|server| server.name == server_name)
+                .cloned()
+                .ok_or_else(|| "external MCP service is not configured".to_owned())?
+        };
         server.call(tool_name, arguments).await
     }
 }
