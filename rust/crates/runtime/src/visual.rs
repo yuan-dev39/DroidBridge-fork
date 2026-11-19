@@ -1233,6 +1233,7 @@ where
         VisualInteractInput::Tap { target, .. } => interaction_target(
             observations,
             execution,
+            current,
             envelope.admitted_at_ms,
             target,
             "tap",
@@ -1391,6 +1392,7 @@ where
 fn interaction_target(
     observations: &Arc<Mutex<VisualObservationCache>>,
     execution: &AdmittedExecution,
+    current: &CapabilitySnapshot,
     now_ms: u64,
     target: &PointTarget,
     operation: &str,
