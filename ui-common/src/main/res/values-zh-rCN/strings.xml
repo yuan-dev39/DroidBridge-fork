@@ -395,4 +395,17 @@
     <string name="nav_home">首页</string>
     <string name="settings_data_summary_runtime">凭据与运行数据</string>
     <string name="shizuku_state_compat_required">需要配置 Compat Hub</string>
+    <string name="settings_external_mcp_title">外部 MCP 服务</string>
+    <string name="settings_external_mcp_summary">添加本地 MCP 服务，并将其工具整合到 DroidBridge。</string>
+    <string name="external_mcp_add">添加服务</string>
+    <string name="external_mcp_name">服务名称</string>
+    <string name="external_mcp_endpoint">MCP 地址</string>
+    <string name="external_mcp_token">Bearer Token（可选）</string>
+    <string name="external_mcp_prefix">工具命名空间</string>
+    <string name="external_mcp_test">测试连接</string>
+    <string name="external_mcp_connected">已连接</string>
+    <string name="external_mcp_disconnected">未连接</string>
+    <string name="external_mcp_tools_count">发现 %1$d 个工具</string>
+    <string name="external_mcp_remove">删除服务</string>
+    <string name="external_mcp_security_note">出于安全考虑，默认仅允许 localhost / 127.0.0.1 的 HTTP 地址。</string>
 </resources>
