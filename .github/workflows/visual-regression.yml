@@ -51,7 +51,9 @@ jobs:
           SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)"
           test -n "$SDKMANAGER"
           yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" "platforms;android-37" "build-tools;36.0.0" "ndk;29.0.14206865"
+          "$SDKMANAGER" "platforms;android-37.0" "build-tools;36.0.0" "ndk;29.0.14206865"
+          test -d "$ANDROID_HOME/platforms/android-37.0"
+          ln -sfn android-37.0 "$ANDROID_HOME/platforms/android-37"
       - name: Install cargo-ndk required by the Android Gradle native build
         run: cargo install cargo-ndk --locked
       - name: Generate reviewable Gradle verification metadata and compile Kotlin
@@ -83,7 +85,9 @@ jobs:
           SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)"
           test -n "$SDKMANAGER"
           yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" "platforms;android-37" "build-tools;36.0.0" "ndk;29.0.14206865"
+          "$SDKMANAGER" "platforms;android-37.0" "build-tools;36.0.0" "ndk;29.0.14206865"
+          test -d "$ANDROID_HOME/platforms/android-37.0"
+          ln -sfn android-37.0 "$ANDROID_HOME/platforms/android-37"
       - name: Install cargo-ndk
         run: cargo install cargo-ndk --locked
       - name: Build debug APK with strict dependency verification
