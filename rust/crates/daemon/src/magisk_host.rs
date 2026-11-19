@@ -37,6 +37,7 @@ use runtime::{
 };
 use std::{
     fs, io,
+    net::TcpListener,
     os::fd::{AsRawFd, FromRawFd},
     os::unix::fs::{FileTypeExt, PermissionsExt},
     os::unix::net::{UnixListener, UnixStream},
