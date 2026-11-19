@@ -11,15 +11,21 @@ import com.droidbridge.ui.client.RuntimeReadiness
 import com.droidbridge.ui.client.RuntimeSnapshot
 
 /**
- * The capability facts of the root edition. Root provides every capability, so a row appears
- * only for what is not available yet; the frontend itself grants nothing.
+ * The root edition reports its Magisk runtime and the independently probed Shizuku bridge.
+ * Shizuku availability is shown separately and never masquerades as a running Root daemon.
  */
 object RootCapabilities {
-    fun project(client: ClientState, daemon: DaemonStatus?, frontendVersionCode: Long): List<CapabilityRow> {
+    fun project(
+        client: ClientState,
+        daemon: DaemonStatus?,
+        frontendVersionCode: Long,
+        shizuku: CapabilityRow,
+    ): List<CapabilityRow> {
         val snapshot = (client as? ClientState.Available)?.snapshot
         return buildList {
             add(runtime(client, snapshot))
             add(backend(snapshot, daemon, frontendVersionCode))
+            add(shizuku)
             if (snapshot == null) return@buildList
             val localNetwork = snapshot.grant("android.local_network")
             if (localNetwork.state != AvailabilityState.Available) {
