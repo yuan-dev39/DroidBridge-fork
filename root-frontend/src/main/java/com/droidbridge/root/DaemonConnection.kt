@@ -96,6 +96,18 @@ class DaemonConnection(
 
     suspend fun mcpServersList(): String = request("mcp_servers_list").toString()
 
+    suspend fun mcpLanSettings(): String = request("mcp_lan_settings").toString()
+
+    suspend fun setMcpLanEnabled(enabled: Boolean): String =
+        request("mcp_lan_set_enabled", buildJsonObject { put("enabled", enabled) }).toString()
+
+    suspend fun setMcpLanPort(port: Int): String =
+        request("mcp_lan_set_port", buildJsonObject { put("port", port) }).toString()
+
+    suspend fun rotateMcpLanToken(): String = request("mcp_lan_rotate_token").toString()
+
+    suspend fun revealMcpLanToken(): String = request("mcp_lan_reveal_token").toString()
+
     suspend fun addMcpServer(id: String, displayName: String, endpoint: String, bearerToken: String?): String =
         request("mcp_server_add", buildJsonObject {
             put("id", id); put("display_name", displayName); put("endpoint", endpoint)
