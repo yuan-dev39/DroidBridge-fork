@@ -59,11 +59,18 @@ jobs:
             "platforms;android-35" \
             "platforms;android-36" \
             "build-tools;36.0.0" \
-            "ndk;29.0.14206865"
+            "ndk;29.0.14206865" \\
+            "cmake;3.31.6"
           sdkmanager --install "platforms;android-37.0"
           # SDK Manager publishes API 37 under android-37.0, while this project's
           # AGP and framework helper task resolve the canonical android-37 path.
           ln -sfn android-37.0 "$ANDROID_HOME/platforms/android-37"
+      - name: Install libpcap build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flex bison
+      - name: Build pinned Android libpcap
+        run: bash tools/build-libpcap.sh
       - uses: dtolnay/rust-toolchain@1.98.0
         with:
           targets: aarch64-linux-android
