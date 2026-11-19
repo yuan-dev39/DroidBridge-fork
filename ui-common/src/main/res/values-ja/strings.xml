@@ -396,4 +396,16 @@
     <string name="nav_home">ホーム</string>
     <string name="settings_data_summary_runtime">認証情報と Runtime データ</string>
     <string name="shizuku_state_compat_required">Compat Hub の設定が必要です</string>
+    <string name="mcp_setup_prompt_template">Android スマートフォン上で動作する MCP サーバー、DroidBridge に接続してください。\n\nサーバー名：droidbridge\nURL：%1$s（Streamable HTTP）\nヘッダー：Authorization: Bearer %3$s\n\n1. このスマートフォン上で実行していない場合は、まず `adb devices` に端末が表示されることを確認し、次に `adb forward tcp:%2$s tcp:%2$s` を実行してください。端末が表示されない場合は、そこで停止して知らせてください。\n2. 使用している MCP クライアントの最新ドキュメントまたは `mcp add --help` に従い、この URL とヘッダーを使ってリモート HTTP サーバーとして設定してください。OAuth は使用しません。クライアントがリモートサーバーに OAuth を要求する場合、このサーバーでは無効にしてください。\n3. droidbridge の `context` ツールを {\"action\": \"status\", \"input\": {}} で呼び出し、報告された準備状態を教えてください。追加したサーバーのツールを利用するために再起動が必要な場合は、再起動を依頼し、再起動後にもう一度呼び出してください。\n\nこのトークンはスマートフォンへのアクセス権を持ちます。この MCP 設定内だけに保存し、返信で繰り返さないでください。</string>
+    <string name="tunnel_create_plugin_instructions">• 右上の「追加」をタップし、「MCP アプリを作成」を選択します。\n• 認証方式を「なし」に設定します。</string>
+    <string name="tunnel_developer_mode_instructions">ChatGPT のセキュリティ設定を開き、開発者モードを有効にしてください。Plus アカウントへの提供は段階的に行われているため、まだ切り替え項目が表示されない場合があります。</string>
+    <string name="tunnel_intro_body">ChatGPT の Web 版と Plus、Pro、Business、Enterprise、Education のいずれかのアカウントが必要です。以下のリンクをパソコンのブラウザーで開くか、ブラウザーをデスクトップ表示に切り替えてください。</string>
+    <string name="tunnel_plugin_confirm_body">ChatGPT のセキュリティ設定で開発者モードを有効にし、このトンネルを使用して認証方式を「なし」に設定した %1$s プラグインを作成したことを確認してください。</string>
+    <string name="tunnel_plugin_confirm_no">もう一度確認する</string>
+    <plurals name="capabilities_remaining">
+        <item quantity="other">セットアップが残り %1$d 項目です</item>
+    </plurals>
+    <plurals name="step_repeat">
+        <item quantity="other">%1$d 回繰り返す</item>
+    </plurals>
 </resources>
