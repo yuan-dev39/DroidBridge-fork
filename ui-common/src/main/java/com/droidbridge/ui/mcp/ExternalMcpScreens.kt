@@ -130,7 +130,7 @@ fun ExternalMcpRoute(viewModel: ExternalMcpViewModel, back: () -> Unit) {
                 title = { Text(stringResource(R.string.external_mcp_title)) },
                 navigationIcon = { TextButton(onClick = back) { Text(stringResource(R.string.action_back)) } },
                 actions = {
-                    TextButton(enabled = !state.saving, onClick = { adding = true }) {
+                    TextButton(enabled = !state.saving && !state.loading, onClick = { adding = true }) {
                         Text(stringResource(R.string.external_mcp_add))
                     }
                 },
@@ -145,7 +145,7 @@ fun ExternalMcpRoute(viewModel: ExternalMcpViewModel, back: () -> Unit) {
                     trailingContent = { TextButton(onClick = viewModel::refresh) { Text(stringResource(R.string.action_retry)) } },
                 )
             }
-            if (!state.loading && state.services.isEmpty()) item {
+            if (!state.loading && !state.failed && state.services.isEmpty()) item {
                 ListItem(headlineContent = { Text(stringResource(R.string.external_mcp_empty)) })
             }
             items(state.services, key = { it.config.name }) { entry ->
@@ -200,7 +200,7 @@ fun ExternalMcpRoute(viewModel: ExternalMcpViewModel, back: () -> Unit) {
             title = { Text(stringResource(R.string.external_mcp_delete_title, entry.config.name)) },
             text = { Text(stringResource(R.string.external_mcp_delete_body)) },
             confirmButton = {
-                TextButton(onClick = { viewModel.delete(entry.config.name); deleting = null }) {
+                TextButton(enabled = !state.saving, onClick = { viewModel.delete(entry.config.name); deleting = null }) {
                     Text(stringResource(R.string.action_delete))
                 }
             },
@@ -231,7 +231,9 @@ private fun ExternalMcpEditor(
         title = { Text(stringResource(if (initial == null) R.string.external_mcp_add else R.string.external_mcp_edit)) },
         text = {
             Column {
-                OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.external_mcp_name)) }, singleLine = true)
+                OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.external_mcp_name)) },
+                    supportingText = { Text(stringResource(R.string.external_mcp_name_hint)) },
+                    singleLine = true)
                 OutlinedTextField(
                     endpoint, { endpoint = it },
                     label = { Text(stringResource(R.string.external_mcp_endpoint)) },
