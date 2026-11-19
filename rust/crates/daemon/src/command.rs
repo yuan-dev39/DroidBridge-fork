@@ -748,6 +748,12 @@ impl RootCommandGuard {
         let exit_code = (cause == CommandProcessCause::Exited)
             .then(|| settlement.shell_exit_code.or(reaped.exit_code))
             .flatten();
+        if unsafe { libc::geteuid() } != 0 {
+            return Err(ExecutionFailure {
+                error: DomainError::new(ErrorCode::PermissionDenied, "Magisk command daemon is not UID 0"),
+                cleanup_verified: settlement.cleanup_verified,
+            });
+        }
         Ok(CommandProcessSettlement {
             outcome: CommandProcessOutcome {
                 cause,
@@ -757,6 +763,7 @@ impl RootCommandGuard {
                 stderr: stderr.bytes,
                 stderr_truncated: stderr.truncated,
             },
+            actual_run_as: Some(RunAs::Root),
             cleanup_verified: settlement.cleanup_verified,
         })
     }
