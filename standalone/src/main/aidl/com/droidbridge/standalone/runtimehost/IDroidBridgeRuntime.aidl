@@ -18,6 +18,9 @@ interface IDroidBridgeRuntime {
     String configureTunnel(String tunnelId, String apiKey);
     String setTunnelEnabled(boolean enabled);
     String clearTunnel();
+    String getExternalMcpSettings();
+    String replaceExternalMcpServices(String servicesJson);
+    String reloadExternalMcpServices();
     String getMaintenanceState();
     String getDiagnosticsSnapshot();
     String resetRuntimeData();
