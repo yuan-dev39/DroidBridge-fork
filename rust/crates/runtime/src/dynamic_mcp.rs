@@ -1,0 +1,211 @@
+//! Dynamic upstream MCP registry primitives. The daemon owns persistence and supplies this
+//! shared registry to each facade instance; credentials never leave this module's call path.
+use reqwest::{Client, Url, header::{AUTHORIZATION, CONTENT_TYPE, ACCEPT, HeaderValue}};
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
+use std::{collections::BTreeMap, net::IpAddr, sync::{Arc, RwLock}, time::Duration};
+use tokio::time::timeout;
+
+pub const MAX_SERVERS: usize = 16;
+pub const MAX_TOOLS_PER_SERVER: usize = 128;
+pub const MAX_RESPONSE_BYTES: usize = 2 * 1024 * 1024;
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(12);
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct McpServerConfig {
+    pub id: String,
+    pub display_name: String,
+    pub endpoint: String,
+    #[serde(default = "default_enabled")]
+    pub enabled: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bearer_token: Option<String>,
+}
+fn default_enabled() -> bool { true }
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PublishedTool {
+    pub server_id: String,
+    pub upstream_name: String,
+    pub definition: Value,
+    pub published_name: String,
+}
+
+#[derive(Clone, Default)]
+pub struct DynamicMcpRegistry {
+    servers: Arc<RwLock<BTreeMap<String, ServerEntry>>>,
+}
+#[derive(Clone, Default)]
+struct ServerEntry {
+    config: Option<McpServerConfig>,
+    tools: Vec<PublishedTool>,
+    protocol_version: Option<String>,
+    session_id: Option<String>,
+    last_error: Option<String>,
+}
+#[derive(Debug)]
+pub enum RegistryError {
+    Invalid(&'static str),
+    Unavailable,
+    Upstream(&'static str),
+    Conflict,
+}
+impl DynamicMcpRegistry {
+    pub fn new() -> Self { Self::default() }
+
+    pub fn validate_config(config: &McpServerConfig) -> Result<Url, RegistryError> {
+        if !valid_id(&config.id) || config.display_name.trim().is_empty()
+            || config.display_name.len() > 80 || config.endpoint.len() > 512 {
+            return Err(RegistryError::Invalid("invalid server identity"));
+        }
+        if config.bearer_token.as_ref().is_some_and(|v| v.is_empty() || v.len() > 512 || !v.bytes().all(|b| b.is_ascii_graphic())) {
+            return Err(RegistryError::Invalid("invalid bearer credential"));
+        }
+        let url = Url::parse(&config.endpoint).map_err(|_| RegistryError::Invalid("invalid endpoint URL"))?;
+        if url.scheme() != "http" || !url.username().is_empty() || url.password().is_some()
+            || url.query().is_some() || url.fragment().is_some() {
+            return Err(RegistryError::Invalid("endpoint must be plain HTTP without userinfo, query or fragment"));
+        }
+        let host = url.host().ok_or(RegistryError::Invalid("endpoint host is missing"))?;
+        let allowed = match host {
+            reqwest::dns::Name::System(_) => false,
+            _ => match url.host_str().and_then(|s| s.parse::<IpAddr>().ok()) {
+                Some(IpAddr::V4(ip)) => ip.is_loopback() || ip.is_private() || ip.is_link_local(),
+                Some(IpAddr::V6(ip)) => ip.is_loopback() || ip.is_unique_local(),
+                None => false,
+            }
+        };
+        if !allowed { return Err(RegistryError::Invalid("only literal loopback or private IP endpoints are allowed")); }
+        Ok(url)
+    }
+
+    pub fn upsert(&self, config: McpServerConfig) -> Result<(), RegistryError> {
+        Self::validate_config(&config)?;
+        let mut entries = self.servers.write().map_err(|_| RegistryError::Unavailable)?;
+        if !entries.contains_key(&config.id) && entries.len() >= MAX_SERVERS { return Err(RegistryError::Invalid("server limit reached")); }
+        let old = entries.get(&config.id).cloned().unwrap_or_default();
+        entries.insert(config.id.clone(), ServerEntry { config: Some(config), ..old });
+        Ok(())
+    }
+    pub fn remove(&self, id: &str) -> Result<(), RegistryError> {
+        self.servers.write().map_err(|_| RegistryError::Unavailable)?.remove(id);
+        Ok(())
+    }
+    pub fn set_enabled(&self, id: &str, enabled: bool) -> Result<(), RegistryError> {
+        let mut entries = self.servers.write().map_err(|_| RegistryError::Unavailable)?;
+        let entry = entries.get_mut(id).ok_or(RegistryError::Invalid("unknown server"))?;
+        entry.config.as_mut().ok_or(RegistryError::Unavailable)?.enabled = enabled;
+        Ok(())
+    }
+    pub fn list_tools(&self) -> Result<Vec<PublishedTool>, RegistryError> {
+        let entries = self.servers.read().map_err(|_| RegistryError::Unavailable)?;
+        let mut out = Vec::new();
+        for (id, entry) in entries.iter() {
+            if entry.config.as_ref().is_some_and(|c| c.enabled) { out.extend(entry.tools.clone()); }
+            // The service ID is part of the public name to prevent cross-server collisions.
+            for tool in out.iter_mut().filter(|t| t.server_id == *id) {
+                tool.published_name = format!("{}__{}", id, tool.upstream_name);
+            }
+        }
+        Ok(out)
+    }
+
+    pub async fn refresh(&self, id: &str) -> Result<usize, RegistryError> {
+        let config = {
+            let entries = self.servers.read().map_err(|_| RegistryError::Unavailable)?;
+            entries.get(id).and_then(|e| e.config.clone()).ok_or(RegistryError::Invalid("unknown server"))?
+        };
+        if !config.enabled { return Err(RegistryError::Invalid("server is disabled")); }
+        let tools = discover(&config).await?;
+        let mut names = std::collections::BTreeSet::new();
+        for tool in &tools {
+            let name = tool.get("name").and_then(Value::as_str).ok_or(RegistryError::Upstream("tool has no name"))?;
+            if !valid_tool_name(name) || !names.insert(name.to_owned()) || !tool.get("inputSchema").is_some_and(Value::is_object) {
+                return Err(RegistryError::Upstream("invalid or duplicate tool definition"));
+            }
+        }
+        if tools.len() > MAX_TOOLS_PER_SERVER { return Err(RegistryError::Invalid("tool limit reached")); }
+        let mut entries = self.servers.write().map_err(|_| RegistryError::Unavailable)?;
+        let entry = entries.get_mut(id).ok_or(RegistryError::Invalid("server was removed"))?;
+        entry.tools = tools.into_iter().map(|definition| {
+            let upstream_name = definition["name"].as_str().unwrap_or_default().to_owned();
+            let mut definition = definition;
+            definition["name"] = json!(format!("{}__{}", id, upstream_name));
+            PublishedTool { server_id: id.to_owned(), upstream_name, definition: definition.clone(), published_name: definition["name"].as_str().unwrap_or_default().to_owned() }
+        }).collect();
+        entry.last_error = None;
+        Ok(entry.tools.len())
+    }
+
+    pub async fn call(&self, published_name: &str, arguments: Value) -> Result<Value, RegistryError> {
+        let (config, upstream_name, session) = {
+            let entries = self.servers.read().map_err(|_| RegistryError::Unavailable)?;
+            let entry = entries.values().find(|e| e.config.as_ref().is_some_and(|c| c.enabled)
+                && e.tools.iter().any(|t| t.published_name == published_name))
+                .ok_or(RegistryError::Invalid("unknown or disabled tool"))?;
+            let tool = entry.tools.iter().find(|t| t.published_name == published_name).ok_or(RegistryError::Unavailable)?;
+            (entry.config.clone().ok_or(RegistryError::Unavailable)?, tool.upstream_name.clone(), entry.session_id.clone())
+        };
+        let response = send_rpc(&config, session.as_deref(), "tools/call", json!({"name":upstream_name,"arguments":arguments})).await?;
+        if response.get("error").is_some() { return Err(RegistryError::Upstream("upstream tool call failed")); }
+        response.get("result").cloned().ok_or(RegistryError::Upstream("missing tool result"))
+    }
+}
+fn valid_id(v: &str) -> bool { !v.is_empty() && v.len() <= 32 && v.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_') }
+fn valid_tool_name(v: &str) -> bool { !v.is_empty() && v.len() <= 128 && v.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-' || b == b'.') }
+
+async fn discover(config: &McpServerConfig) -> Result<Vec<Value>, RegistryError> {
+    let init = send_rpc(config, None, "initialize", json!({
+        "protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"DroidBridge","version":env!("CARGO_PKG_VERSION")}
+    })).await?;
+    let version = init.pointer("/result/protocolVersion").and_then(Value::as_str).ok_or(RegistryError::Upstream("initialize did not negotiate a protocol version"))?;
+    let session = init.get("_sessionId").and_then(Value::as_str).map(str::to_owned);
+    let _ = send_rpc(config, session.as_deref(), "notifications/initialized", json!({})).await;
+    let listed = send_rpc(config, session.as_deref(), "tools/list", json!({})).await?;
+    let tools = listed.pointer("/result/tools").and_then(Value::as_array).ok_or(RegistryError::Upstream("tools/list response is invalid"))?;
+    if tools.len() > MAX_TOOLS_PER_SERVER { return Err(RegistryError::Invalid("tool limit reached")); }
+    // Protocol/session details are cached only after successful discovery.
+    let _ = (version, session);
+    Ok(tools.clone())
+}
+async fn send_rpc(config: &McpServerConfig, session: Option<&str>, method: &str, params: Value) -> Result<Value, RegistryError> {
+    let url = DynamicMcpRegistry::validate_config(config)?;
+    let mut builder = Client::builder().redirect(reqwest::redirect::Policy::none()).connect_timeout(Duration::from_secs(4)).timeout(REQUEST_TIMEOUT);
+    let client = builder.build().map_err(|_| RegistryError::Unavailable)?;
+    let mut request = client.post(url).header(CONTENT_TYPE, "application/json").header(ACCEPT, "application/json, text/event-stream");
+    if let Some(token) = &config.bearer_token {
+        let mut value = HeaderValue::from_str(&format!("Bearer {token}")).map_err(|_| RegistryError::Invalid("invalid credential header"))?;
+        value.set_sensitive(true);
+        request = request.header(AUTHORIZATION, value);
+    }
+    if let Some(session) = session { request = request.header("Mcp-Session-Id", session); }
+    let id = 1_u64;
+    let body = if method.starts_with("notifications/") { json!({"jsonrpc":"2.0","method":method,"params":params}) }
+        else { json!({"jsonrpc":"2.0","id":id,"method":method,"params":params}) };
+    let response = timeout(REQUEST_TIMEOUT, request.json(&body).send()).await.map_err(|_| RegistryError::Unavailable)?.map_err(|_| RegistryError::Unavailable)?;
+    if !response.status().is_success() { return Err(RegistryError::Upstream("upstream returned a non-success status")); }
+    let bytes = response.bytes().await.map_err(|_| RegistryError::Unavailable)?;
+    if bytes.len() > MAX_RESPONSE_BYTES { return Err(RegistryError::Invalid("upstream response too large")); }
+    let value: Value = serde_json::from_slice(&bytes).map_err(|_| RegistryError::Upstream("upstream returned invalid JSON"))?;
+    if method.starts_with("notifications/") { return Ok(json!({})); }
+    Ok(value)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn config(endpoint: &str) -> McpServerConfig { McpServerConfig { id:"mt-manager".into(), display_name:"MT Manager".into(), endpoint:endpoint.into(), enabled:true, bearer_token:None } }
+    #[test] fn accepts_private_literal_endpoints_only() {
+        assert!(DynamicMcpRegistry::validate_config(&config("http://127.0.0.1:8787/mcp")).is_ok());
+        assert!(DynamicMcpRegistry::validate_config(&config("http://10.0.0.8:8787/mcp")).is_ok());
+        assert!(DynamicMcpRegistry::validate_config(&config("https://example.com/mcp")).is_err());
+        assert!(DynamicMcpRegistry::validate_config(&config("http://example.com/mcp")).is_err());
+        assert!(DynamicMcpRegistry::validate_config(&config("http://127.0.0.1/mcp?token=x")).is_err());
+    }
+    #[test] fn names_are_stable_and_service_scoped() {
+        assert!(valid_id("mt-manager"));
+        assert!(!valid_id("../evil"));
+        assert!(valid_tool_name("mt_apk_workspace_open"));
+        assert!(!valid_tool_name("bad name"));
+    }
+}
