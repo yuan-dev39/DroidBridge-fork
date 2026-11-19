@@ -1,13 +1,17 @@
 package com.droidbridge.standalone.runtimehost
 
 import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
 import java.nio.ByteBuffer
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.security.KeyStore
+import java.security.UnrecoverableKeyException
+import javax.crypto.AEADBadTagException
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -155,8 +159,17 @@ internal class ExternalMcpSettingsController(
                 if (runCatching { JSONArray(raw) }.isSuccess) LoadResult.Success(raw)
                 else LoadResult.Failure(INVALID_CONFIG)
             },
-            onFailure = { LoadResult.Failure(CREDENTIAL_STORE_UNAVAILABLE) },
+            onFailure = { failure -> LoadResult.Failure(classifyLoadFailure(failure)) },
         )
+    }
+
+    /** Preserve encrypted data on failure and expose a stable, actionable diagnostic. */
+    private fun classifyLoadFailure(failure: Throwable): String = when (failure) {
+        is AEADBadTagException -> CREDENTIALS_UNREADABLE
+        is KeyPermanentlyInvalidatedException, is UnrecoverableKeyException -> KEYSTORE_KEY_UNAVAILABLE
+        is SecurityException -> STORAGE_ACCESS_DENIED
+        is IOException -> STORAGE_ACCESS_FAILED
+        else -> CREDENTIAL_STORE_UNAVAILABLE
     }
 
     private fun mergeSavedCredentials(incoming: JSONArray, previousRaw: String?): JSONArray {
