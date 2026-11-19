@@ -326,7 +326,7 @@ fn safe_endpoint(raw: &str) -> Option<Url> {
     let host = url.host_str()?;
     let private_http = if url.scheme() == "https" {
         true
-    } else if host.eq_ignore_ascii_case("localhost") || host.ends_with(".localhost") || host.ends_with(".local") {
+    } else if host.eq_ignore_ascii_case("localhost") || host.ends_with(".localhost") {
         true
     } else if let Ok(ip) = host.parse::<IpAddr>() {
         match ip {
@@ -415,6 +415,9 @@ mod tests {
         assert!(!valid_service_name("bad__name"));
         assert!(safe_endpoint("http://127.0.0.1:8787/mcp").is_some());
         assert!(safe_endpoint("http://192.168.1.10:8787/mcp").is_some());
+        // A hostname suffix is not proof that DNS resolves to a private address.
+        assert!(safe_endpoint("http://mcp.example.local:8787/mcp").is_none());
+        assert!(safe_endpoint("http://device.localhost:8787/mcp").is_some());
         assert!(safe_endpoint("https://example.com/mcp").is_some());
         assert!(safe_endpoint("http://example.com/mcp").is_none());
         assert!(safe_endpoint("http://127.0.0.1/other").is_none());
