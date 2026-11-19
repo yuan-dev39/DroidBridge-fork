@@ -37,7 +37,7 @@ fun AgentConnectionRoute(
     viewModel: McpViewModel,
     openMcp: () -> Unit,
     openTunnel: () -> Unit,
-    openExternalMcp: () -> Unit,
+    openExternalMcp: () -> Unit = {},
     back: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
