@@ -123,33 +123,76 @@ impl SettingsStore {
         let file = match fs::File::open(&path) {
             Ok(file) => file,
             Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
-            Err(error) => return Err(DomainError::os(ErrorCode::IoError, "cannot open external MCP settings", &error)),
+            Err(error) => {
+                return Err(DomainError::os(
+                    ErrorCode::IoError,
+                    "cannot open external MCP settings",
+                    &error,
+                ));
+            }
         };
-        let mode = file.metadata()
-            .map_err(|error| DomainError::os(ErrorCode::IoError, "cannot inspect external MCP settings", &error))?
-            .permissions().mode();
+        let mode = file
+            .metadata()
+            .map_err(|error| {
+                DomainError::os(
+                    ErrorCode::IoError,
+                    "cannot inspect external MCP settings",
+                    &error,
+                )
+            })?
+            .permissions()
+            .mode();
         if mode & 0o077 != 0 {
-            return Err(DomainError::new(ErrorCode::IoError, "external MCP settings are readable by others"));
+            return Err(DomainError::new(
+                ErrorCode::IoError,
+                "external MCP settings are readable by others",
+            ));
         }
         let mut bytes = Vec::new();
-        file.take(MAX_EXTERNAL_MCP_BYTES + 1).read_to_end(&mut bytes)
-            .map_err(|error| DomainError::os(ErrorCode::IoError, "cannot read external MCP settings", &error))?;
+        file.take(MAX_EXTERNAL_MCP_BYTES + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|error| {
+                DomainError::os(
+                    ErrorCode::IoError,
+                    "cannot read external MCP settings",
+                    &error,
+                )
+            })?;
         if bytes.len() as u64 > MAX_EXTERNAL_MCP_BYTES {
-            return Err(DomainError::new(ErrorCode::IoError, "external MCP settings exceed their bound"));
+            return Err(DomainError::new(
+                ErrorCode::IoError,
+                "external MCP settings exceed their bound",
+            ));
         }
-        let value: serde_json::Value = serde_json::from_slice(&bytes)
-            .map_err(|_| DomainError::new(ErrorCode::IoError, "external MCP settings are invalid"))?;
-        if value.get("schema_version").and_then(serde_json::Value::as_u64) != Some(1)
-            || !value.get("services_json").and_then(serde_json::Value::as_str).is_some()
+        let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(|_| {
+            DomainError::new(ErrorCode::IoError, "external MCP settings are invalid")
+        })?;
+        if value
+            .get("schema_version")
+            .and_then(serde_json::Value::as_u64)
+            != Some(1)
+            || !value
+                .get("services_json")
+                .and_then(serde_json::Value::as_str)
+                .is_some()
         {
-            return Err(DomainError::new(ErrorCode::IoError, "external MCP settings schema is invalid"));
+            return Err(DomainError::new(
+                ErrorCode::IoError,
+                "external MCP settings schema is invalid",
+            ));
         }
-        Ok(value.get("services_json").and_then(serde_json::Value::as_str).map(str::to_owned))
+        Ok(value
+            .get("services_json")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned))
     }
 
     pub(crate) fn commit_external_mcp(&self, services_json: &str) -> Result<(), DomainError> {
         if services_json.len() > 65_536 {
-            return Err(DomainError::new(ErrorCode::ResourceLimit, "external MCP settings exceed their bound"));
+            return Err(DomainError::new(
+                ErrorCode::ResourceLimit,
+                "external MCP settings exceed their bound",
+            ));
         }
         let value = serde_json::json!({"schema_version": 1, "services_json": services_json});
         write_settings(&self.base, EXTERNAL_MCP_FILE, &value)
@@ -159,7 +202,11 @@ impl SettingsStore {
         match fs::remove_file(self.base.join(EXTERNAL_MCP_FILE)) {
             Ok(()) => sync_directory(&self.base),
             Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
-            Err(error) => Err(DomainError::os(ErrorCode::IoError, "cannot remove external MCP settings", &error)),
+            Err(error) => Err(DomainError::os(
+                ErrorCode::IoError,
+                "cannot remove external MCP settings",
+                &error,
+            )),
         }
     }
 
@@ -326,10 +373,14 @@ mod tests {
     fn external_mcp_credentials_round_trip_in_owner_only_storage() {
         use std::os::unix::fs::PermissionsExt;
         let (store, base) = store("external-mcp");
-        let raw = r#"[{"name":"mt","endpoint":"http://127.0.0.1:8787/mcp","bearer_token":"secret"}]"#;
+        let raw =
+            r#"[{"name":"mt","endpoint":"http://127.0.0.1:8787/mcp","bearer_token":"secret"}]"#;
         store.commit_external_mcp(raw).unwrap();
         assert_eq!(store.external_mcp().unwrap().as_deref(), Some(raw));
-        let mode = fs::metadata(base.join("external-mcp.json")).unwrap().permissions().mode();
+        let mode = fs::metadata(base.join("external-mcp.json"))
+            .unwrap()
+            .permissions()
+            .mode();
         assert_eq!(mode & 0o077, 0);
         fs::remove_dir_all(base).unwrap();
     }
