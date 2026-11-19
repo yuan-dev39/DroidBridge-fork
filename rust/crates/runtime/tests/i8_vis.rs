@@ -326,11 +326,12 @@ impl VisualPrimitivePort for FixtureVisualPort {
 
     fn interact(
         &self,
-        _execution: &AdmittedExecution,
+        execution: &AdmittedExecution,
         request: VisualInteractionRequest,
         _claim: &LocalExecutionClaim,
     ) -> Result<(), ExecutionFailure> {
         let mut state = self.state.lock().unwrap();
+        state.providers.push(execution.executor.provider);
         if state.stale_interaction {
             return Err(ExecutionFailure {
                 error: DomainError::new(ErrorCode::StaleReference, "scene proof changed"),
@@ -472,6 +473,9 @@ async fn i8_vis_coordinate_input_accepts_current_hierarchy_from_a_different_prov
     assert_eq!(interacted["outcome"], "success", "{interacted}");
     assert_eq!(interacted["result"]["delivered"], true);
     assert_eq!(primitive.interactions().len(), 1);
+    let providers = primitive.providers();
+    assert!(providers.contains(&runtime::ProviderToken::Accessibility));
+    assert_eq!(providers.last(), Some(&runtime::ProviderToken::Shizuku));
 }
 
 #[tokio::test]
