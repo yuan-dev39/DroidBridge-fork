@@ -98,7 +98,7 @@ impl ExternalMcpServer {
         }
         let endpoint = safe_endpoint(&config.endpoint)?;
         let bearer_token = config.bearer_token.filter(|token| {
-            !token.is_empty() && token.len() <= 4096 && !token.contains(['\r', '\n'])
+            !token.is_empty() && token.len() <= 4096 && !token.contains('\r') && !token.contains('\n')
         });
         let client = Client::builder()
             .connect_timeout(Duration::from_secs(3))
