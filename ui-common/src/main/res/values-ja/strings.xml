@@ -193,9 +193,6 @@
     <string name="reason_user_consent_required">このリクエストを許可するには、画面キャプチャを開始してください。</string>
     <string name="settings_external_mcp_title">外部 MCP サービス</string>
     <string name="settings_external_mcp_summary">ローカル MCP サーバーを登録し、ツールを DroidBridge に統合します。</string>
-    <string name="external_mcp_add">サービスを追加</string>
-    <string name="external_mcp_name">サービス名</string>
-    <string name="external_mcp_endpoint">MCP エンドポイント</string>
     <string name="external_mcp_token">Bearer トークン（任意）</string>
     <string name="external_mcp_prefix">ツールの名前空間</string>
     <string name="external_mcp_test">接続をテスト</string>
