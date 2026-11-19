@@ -66,12 +66,23 @@ impl DynamicMcpRegistry {
             || url.query().is_some() || url.fragment().is_some() {
             return Err(RegistryError::Invalid("endpoint must be plain HTTP without userinfo, query or fragment"));
         }
-        let allowed = match url.host_str().and_then(|host| host.parse::<IpAddr>().ok()) {
-            Some(IpAddr::V4(ip)) => ip.is_loopback() || ip.is_private() || ip.is_link_local(),
-            Some(IpAddr::V6(ip)) => ip.is_loopback() || ip.is_unique_local(),
+        let parsed_host = url.host_str().and_then(|host| host.parse::<IpAddr>().ok());
+        let loopback = match parsed_host {
+            Some(IpAddr::V4(ip)) => ip.is_loopback(),
+            Some(IpAddr::V6(ip)) => ip.is_loopback(),
             None => false,
         };
-        if !allowed { return Err(RegistryError::Invalid("only literal loopback or private IP endpoints are allowed")); }
+        let allowed = match parsed_host {
+            Some(IpAddr::V4(ip)) => loopback || ip.is_private() || ip.is_link_local(),
+            Some(IpAddr::V6(ip)) => loopback || ip.is_unique_local(),
+            None => false,
+        };
+        if !allowed {
+            return Err(RegistryError::Invalid("only literal loopback or private IP endpoints are allowed"));
+        }
+        if config.bearer_token.is_some() && !loopback {
+            return Err(RegistryError::Invalid("bearer credentials are allowed only for loopback endpoints over HTTP"));
+        }
         Ok(url)
     }
 
@@ -134,7 +145,17 @@ impl DynamicMcpRegistry {
             entries.get(id).and_then(|e| e.config.clone()).ok_or(RegistryError::Invalid("unknown server"))?
         };
         if !config.enabled { return Err(RegistryError::Invalid("server is disabled")); }
-        let (tools, protocol_version, session_id) = discover(&config).await?;
+        let (tools, protocol_version, session_id) = match discover(&config).await {
+            Ok(discovered) => discovered,
+            Err(error) => {
+                if let Ok(mut entries) = self.servers.write() {
+                    if let Some(entry) = entries.get_mut(id) {
+                        entry.last_error = Some("discovery_failed".to_owned());
+                    }
+                }
+                return Err(error);
+            }
+        };
         let mut names = std::collections::BTreeSet::new();
         for tool in &tools {
             let name = tool.get("name").and_then(Value::as_str).ok_or(RegistryError::Upstream("tool has no name"))?;
