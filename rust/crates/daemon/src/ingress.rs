@@ -155,13 +155,13 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
             return failure("PERSISTENCE_FAILED");
         }
         if let Err(code) = self.external_registry.replace_json(&effective_raw) {
-            if let Some(previous) = previous {
-                let _ = self.settings.commit_external_mcp(&previous);
-                let _ = self.external_registry.replace_json(&previous);
-            } else {
-                let _ = self.settings.clear_external_mcp();
-            }
-            return failure(code);
+            // replace_json swaps only after the full replacement has been constructed, so the
+            // previous in-memory registry is still active. Restore only the durable snapshot.
+            let rolled_back = match previous.as_deref() {
+                Some(previous) => self.settings.commit_external_mcp(previous).is_ok(),
+                None => self.settings.clear_external_mcp().is_ok(),
+            };
+            return failure(if rolled_back { code } else { "PERSISTENCE_FAILED" });
         }
         json!({"schema_version": 1, "applied": true, "service_count": incoming.len()})
     }
