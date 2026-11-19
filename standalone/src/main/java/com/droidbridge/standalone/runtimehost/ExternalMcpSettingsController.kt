@@ -55,7 +55,10 @@ internal class ExternalMcpSettingsController(
                 } else {
                     val result = registry.replace(raw)
                     startupFailure = result.takeUnless { it == OK }
-                    if (result == OK) successReply() else errorReply(result)
+                    if (result == OK) successReply() else {
+                        registry.replace("[]")
+                        errorReply(result)
+                    }
                 }
             }
         }
@@ -99,19 +102,15 @@ internal class ExternalMcpSettingsController(
         val encoded = effective.toString()
         val oldBytes = runCatching { if (file.exists()) file.readBytes() else null }
             .getOrElse { return errorReply(PERSISTENCE_FAILED) }
-        val persisted = runCatching { writeEncrypted(encoded) }.isSuccess
-        if (!persisted) return errorReply(PERSISTENCE_FAILED)
+        val persisted = runCatching { writeEncrypted(encoded) }
+        if (persisted.isFailure) {
+            rollbackFile(oldBytes)
+            return errorReply(PERSISTENCE_FAILED)
+        }
 
         val applied = registry.replace(encoded)
         if (applied != OK) {
-            runCatching {
-                if (oldBytes == null) {
-                    if (file.exists() && !file.delete()) error("cannot remove failed snapshot")
-                    fileSystem.syncDirectory(checkNotNull(file.parentFile))
-                } else {
-                    writeBytesAtomically(oldBytes)
-                }
-            }
+            rollbackFile(oldBytes)
             return errorReply(applied)
         }
         startupFailure = null
@@ -179,6 +178,17 @@ internal class ExternalMcpSettingsController(
             }
         }
         return incoming
+    }
+
+    private fun rollbackFile(previousBytes: ByteArray?) {
+        runCatching {
+            if (previousBytes == null) {
+                if (file.exists() && !file.delete()) error("cannot remove failed snapshot")
+                fileSystem.syncDirectory(checkNotNull(file.parentFile))
+            } else {
+                writeBytesAtomically(previousBytes)
+            }
+        }
     }
 
     private fun writeEncrypted(raw: String) {
