@@ -358,21 +358,7 @@ impl ExternalMcpServer {
             // network changes. Reinitialize once, then retry the original request exactly once.
             state.session_id = None;
             state.initialized = false;
-            let initialized = self
-                .rpc_once(
-                    state,
-                    "initialize",
-                    json!({
-                        "protocolVersion": "2025-03-26",
-                        "capabilities": {},
-                        "clientInfo": {"name": "droidbridge-mcp-proxy", "version": "0.5.9"}
-                    }),
-                )
-                .await?;
-            if initialized.get("result").is_none() {
-                return Err("remote MCP re-initialize reply is invalid".to_owned());
-            }
-            state.initialized = true;
+            self.ensure_initialized(state).await?;
             return self.rpc_once(state, method, params).await;
         }
         result
