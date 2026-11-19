@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: dynamic-mcp-registry-${{ github.ref }}
@@ -30,20 +30,10 @@ jobs:
           workspaces: rust
       - name: Format Rust sources
         working-directory: rust
-        run: cargo fmt --all
+        run: cargo fmt --all -- --check
       - name: Run workspace tests
         working-directory: rust
         run: cargo test --workspace --locked
-      - name: Commit rustfmt changes
-        if: success() && github.event_name == 'push'
-        run: |
-          if ! git diff --quiet -- rust; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add rust
-            git commit -m "style: rustfmt dynamic MCP registry [skip ci]"
-            git push origin "HEAD:${GITHUB_REF}"
-          fi
 
   android:
     name: Build Android debug Magisk module
