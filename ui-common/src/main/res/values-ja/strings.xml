@@ -184,7 +184,7 @@
     <string name="external_mcp_disconnected">未接続</string>
     <string name="external_mcp_tools_count">%1$d 個のツールを検出</string>
     <string name="external_mcp_remove">サービスを削除</string>
-    <string name="external_mcp_security_note">セキュリティのため、初期設定では localhost / 127.0.0.1 の HTTP エンドポイントのみ許可されます。</string>
+    <string name="external_mcp_security_note">セキュリティのため、HTTP は localhost またはプライベート LAN アドレスのみ許可されます。パブリック HTTP は拒否されます。HTTPS も利用できます。</string>
     <string name="settings_support">DroidBridge を支援</string>
     <string name="settings_support_summary">Ko-fi で開発者にコーヒーを一杯おごる</string>
     <string name="action_keep_editing">編集を続ける</string>
