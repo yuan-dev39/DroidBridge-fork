@@ -48,7 +48,7 @@ class I6_GatesTest {
     }
 
     @Test
-    fun I6_G01_providerIdentityProjectionNeverPromotesMissingGrantOrUid0() {
+    fun I6_G01_providerIdentityProjectionRequiresGrantAndAcceptsVerifiedRootOrShell() {
         val fixtures = listOf(
             ShizukuObservation(false, false, false, null, false) to
                 Triple(ShizukuProviderState.NotInstalled, RegisteredCapabilityState.Unavailable, "MANAGER_NOT_INSTALLED"),
@@ -63,7 +63,7 @@ class I6_GatesTest {
             ShizukuObservation(true, true, true, 2_000, false) to
                 Triple(ShizukuProviderState.Connected, RegisteredCapabilityState.Available, null),
             ShizukuObservation(true, true, true, 0, false) to
-                Triple(ShizukuProviderState.IncompatibleIdentity, RegisteredCapabilityState.Unavailable, "INCOMPATIBLE_IDENTITY"),
+                Triple(ShizukuProviderState.Connected, RegisteredCapabilityState.Available, null),
         )
 
         fixtures.forEach { (observation, expected) ->
@@ -90,7 +90,7 @@ class I6_GatesTest {
     }
 
     @Test
-    fun plusDiscoveryDoesNotGrantAuthorizationOrInferBinderOwnership() {
+    fun plusDiscoveryDoesNotGrantAuthorizationButAcceptsVerifiedRootIdentity() {
         val absentHub = ShizukuCapabilityProjector.project(
             ShizukuObservation(false, true, true, 2_000, false, plusInstalled = true),
         )
@@ -105,8 +105,8 @@ class I6_GatesTest {
         val root = ShizukuCapabilityProjector.project(
             ShizukuObservation(true, true, true, 0, false, plusInstalled = true),
         )
-        assertEquals(ShizukuProviderState.IncompatibleIdentity, root.providerState)
-        assertFalse(root.exposesExecutor)
+        assertEquals(ShizukuProviderState.Connected, root.providerState)
+        assertTrue(root.exposesExecutor)
         val quarantined = ShizukuCapabilityProjector.project(
             ShizukuObservation(true, true, true, 2_000, false, cleanupQuarantined = true, plusInstalled = true),
         )
@@ -176,11 +176,11 @@ class I6_GatesTest {
     }
 
     @Test
-    fun I6_G06_guardLaunchPolicyRejectsRootWrongPathAndFalseCancellation() {
+    fun I6_G06_guardLaunchPolicyAcceptsVerifiedRootAndShellButRejectsWrongPathAndFalseCancellation() {
         val nativeDirectory = "/data/app/example/lib/arm64"
         val guard = "$nativeDirectory/libdroidbridge_exec_guard.so"
         assertTrue(ShizukuLaunchPolicy.isAdmitted(2_000, 10_123, 10_123, nativeDirectory, guard, 63))
-        assertFalse(ShizukuLaunchPolicy.isAdmitted(0, 10_123, 10_123, nativeDirectory, guard, 0))
+        assertTrue(ShizukuLaunchPolicy.isAdmitted(0, 10_123, 10_123, nativeDirectory, guard, 0))
         assertFalse(ShizukuLaunchPolicy.isAdmitted(2_000, 10_124, 10_123, nativeDirectory, guard, 0))
         assertFalse(
             ShizukuLaunchPolicy.isAdmitted(
