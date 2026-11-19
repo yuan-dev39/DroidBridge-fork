@@ -962,7 +962,7 @@ internal fun shouldRequestPostNotifications(context: Context): Boolean {
 }
 
 @androidx.annotation.RequiresApi(37)
-private fun localNetworkPermission(): String = Manifest.permission.ACCESS_LOCAL_NETWORK
+private fun localNetworkPermission(): String = "android.permission.ACCESS_LOCAL_NETWORK"
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
