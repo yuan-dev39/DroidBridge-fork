@@ -378,7 +378,7 @@ mod tests {
         loop {
             line.clear();
             reader.read_line(&mut line).unwrap();
-            if line == "\\r\\n" || line.is_empty() { break; }
+            if line == "\r\n" || line.is_empty() { break; }
             if let Some((name, value)) = line.split_once(':') {
                 if name.eq_ignore_ascii_case("content-length") {
                     length = value.trim().parse().unwrap();
@@ -394,7 +394,7 @@ mod tests {
     fn write_mock_response(stream: &mut std::net::TcpStream, status: &str, headers: &str, body: &Value) {
         use std::io::Write;
         let body = serde_json::to_vec(body).unwrap();
-        write!(stream, "HTTP/1.1 {status}\\r\\n{headers}Content-Type: application/json\\r\\nContent-Length: {}\\r\\nConnection: close\\r\\n\\r\\n", body.len()).unwrap();
+        write!(stream, "HTTP/1.1 {status}\r\n{headers}Content-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len()).unwrap();
         stream.write_all(&body).unwrap();
     }
 
@@ -410,19 +410,19 @@ mod tests {
                 let method = request["method"].as_str().unwrap();
                 match (step, method) {
                     (0, "initialize") => {
-                        write_mock_response(&mut stream, "200 OK", "Mcp-Session-Id: session-test\\r\\n", &json!({
+                        write_mock_response(&mut stream, "200 OK", "Mcp-Session-Id: session-test\r\n", &json!({
                             "jsonrpc":"2.0","id":request["id"],
                             "result":{"protocolVersion":"2025-03-26","capabilities":{"tools":{}}}
                         }));
                     }
                     (1, "notifications/initialized") => {
                         assert!(headers.to_ascii_lowercase().contains("mcp-session-id: session-test"));
-                        stream.write_all(b"HTTP/1.1 202 Accepted\\r\\nContent-Length: 0\\r\\nConnection: close\\r\\n\\r\\n").unwrap();
+                        stream.write_all(b"HTTP/1.1 202 Accepted\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").unwrap();
                     }
                     (2, "tools/list") => {
-                        assert!(headers.contains("Mcp-Session-Id: session-test"));
+                        assert!(headers.to_ascii_lowercase().contains("mcp-session-id: session-test"));
                         assert!(headers.to_ascii_lowercase().contains("mcp-protocol-version: 2025-03-26"));
-                        write_mock_response(&mut stream, "200 OK", "Mcp-Session-Id: session-test\\r\\n", &json!({
+                        write_mock_response(&mut stream, "200 OK", "Mcp-Session-Id: session-test\r\n", &json!({
                             "jsonrpc":"2.0","id":request["id"],"result":{"tools":[{
                                 "name":"echo","description":"Echo input",
                                 "inputSchema":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"]}
@@ -433,7 +433,7 @@ mod tests {
                         assert!(headers.contains("Mcp-Session-Id: session-test"));
                         assert_eq!(request["params"]["name"], "echo");
                         assert_eq!(request["params"]["arguments"]["text"], "hello");
-                        write_mock_response(&mut stream, "200 OK", "Mcp-Session-Id: session-test\\r\\n", &json!({
+                        write_mock_response(&mut stream, "200 OK", "Mcp-Session-Id: session-test\r\n", &json!({
                             "jsonrpc":"2.0","id":request["id"],"result":{
                                 "content":[{"type":"text","text":"hello"}],
                                 "structuredContent":{"echo":"hello"}
