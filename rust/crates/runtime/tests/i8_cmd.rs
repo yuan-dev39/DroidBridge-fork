@@ -793,7 +793,7 @@ async fn i8_cmd_g03_shizuku_is_only_the_apk_surfaces_shell_primitive_provider() 
     ];
     for (facts, call, provider, instance) in wrong_identities {
         let port = ScriptedPort::new();
-        port.script(RunAs::Root, Ok(exited(0)));
+        port.script(RunAs::Root, Ok(exited(RunAs::Root, 0)));
         port.script(RunAs::Shell, Ok(exited(RunAs::Shell, 0)));
         let runner = surface(capabilities_of(facts), identities_of(facts), port.clone());
         let execution = mismatched(facts, &call, provider, instance);
@@ -805,7 +805,7 @@ async fn i8_cmd_g03_shizuku_is_only_the_apk_surfaces_shell_primitive_provider() 
     // The Shizuku provider's generation is the one the resolver published for it, so a
     // stale `shizuku.shell` generation is stale authority rather than a fresh primitive.
     let port = ScriptedPort::new();
-    port.script(RunAs::Shell, Ok(exited(0)));
+    port.script(RunAs::Shell, Ok(exited(RunAs::Shell, 0)));
     let mut stale = capability(apk);
     stale.resolver_facts.generations.shizuku += 1;
     let runner = surface(FakeCapabilities::new(stale), &APK_IDENTITIES, port.clone());
