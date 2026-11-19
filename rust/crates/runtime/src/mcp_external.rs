@@ -1,16 +1,20 @@
 //! External MCP registry. Each configured server has an isolated client, session, cache and
 //! credential. Tool names are namespaced as <server>__<tool>; native DroidBridge tools are untouched.
 
-use reqwest::{header, Client, Url};
+use reqwest::{Client, Url, header};
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{
     collections::BTreeSet,
     net::IpAddr,
     sync::{Arc, RwLock},
     time::Duration,
 };
-use tokio::{sync::Mutex, task::JoinSet, time::{Instant, timeout}};
+use tokio::{
+    sync::Mutex,
+    task::JoinSet,
+    time::{Instant, timeout},
+};
 
 const DEFAULT_ENDPOINT: &str = "http://127.0.0.1:8787/mcp";
 const CACHE_TTL: Duration = Duration::from_secs(15);
@@ -20,7 +24,9 @@ const MAX_TOOLS_PER_SERVER: usize = 64;
 const MAX_REMOTE_TOOL_NAME_BYTES: usize = 96;
 const MAX_TOTAL_EXTERNAL_TOOLS: usize = 128;
 
-fn default_enabled() -> bool { true }
+fn default_enabled() -> bool {
+    true
+}
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -73,16 +79,21 @@ impl ExternalMcpRegistry {
         };
 
         let servers = build_servers(configs, Vec::new());
-        Self { servers: Arc::new(RwLock::new(servers)) }
+        Self {
+            servers: Arc::new(RwLock::new(servers)),
+        }
     }
 
     /// Replaces the active service snapshot. Unchanged services retain their client, MCP session,
     /// tool cache and request-id sequence; removed services immediately stop being routable.
     pub fn replace_json(&self, raw: &str) -> Result<(), &'static str> {
-        if raw.len() > 65_536 { return Err("INVALID_CONFIG"); }
-        let configs: Vec<ServerConfig> =
-            serde_json::from_str(raw).map_err(|_| "INVALID_CONFIG")?;
-        if configs.len() > MAX_SERVERS { return Err("TOO_MANY_SERVICES"); }
+        if raw.len() > 65_536 {
+            return Err("INVALID_CONFIG");
+        }
+        let configs: Vec<ServerConfig> = serde_json::from_str(raw).map_err(|_| "INVALID_CONFIG")?;
+        if configs.len() > MAX_SERVERS {
+            return Err("TOO_MANY_SERVICES");
+        }
         let mut seen = BTreeSet::new();
         for config in &configs {
             if !valid_service_name(&config.name)
@@ -94,7 +105,9 @@ impl ExternalMcpRegistry {
             {
                 return Err("INVALID_CONFIG");
             }
-            if !seen.insert(config.name.clone()) { return Err("DUPLICATE_SERVICE_NAME"); }
+            if !seen.insert(config.name.clone()) {
+                return Err("DUPLICATE_SERVICE_NAME");
+            }
         }
         let expected_active = configs.iter().filter(|config| config.enabled).count();
         let mut active = self.servers.write().map_err(|_| "RUNTIME_UNAVAILABLE")?;
@@ -110,7 +123,11 @@ impl ExternalMcpRegistry {
     /// Discovers tools from every configured server. One unavailable server does not prevent
     /// healthy servers or native DroidBridge tools from being listed.
     pub(crate) async fn tools(&self) -> Vec<Value> {
-        let servers = self.servers.read().map(|items| items.clone()).unwrap_or_default();
+        let servers = self
+            .servers
+            .read()
+            .map(|items| items.clone())
+            .unwrap_or_default();
         let mut tasks = JoinSet::new();
         for server in servers {
             tasks.spawn(async move {
@@ -126,7 +143,8 @@ impl ExternalMcpRegistry {
             }
         }
         all.sort_by(|left, right| {
-            left.get("name").and_then(Value::as_str)
+            left.get("name")
+                .and_then(Value::as_str)
                 .cmp(&right.get("name").and_then(Value::as_str))
         });
         all.truncate(MAX_TOTAL_EXTERNAL_TOOLS);
@@ -134,13 +152,20 @@ impl ExternalMcpRegistry {
     }
 
     /// Routes a namespaced tool call to exactly one configured server.
-    pub(crate) async fn call(&self, qualified_name: &str, arguments: Value) -> Result<Value, String> {
+    pub(crate) async fn call(
+        &self,
+        qualified_name: &str,
+        arguments: Value,
+    ) -> Result<Value, String> {
         let (server_name, tool_name) = qualified_name
             .split_once("__")
             .ok_or_else(|| "external tool name has no service namespace".to_owned())?;
-        let servers = self.servers.read()
+        let servers = self
+            .servers
+            .read()
             .map_err(|_| "external MCP registry is unavailable".to_owned())?;
-        let server = servers.iter()
+        let server = servers
+            .iter()
             .find(|server| server.name == server_name)
             .cloned()
             .ok_or_else(|| "external MCP service is not configured".to_owned())?;
@@ -149,9 +174,14 @@ impl ExternalMcpRegistry {
     }
 }
 
-fn build_servers(configs: Vec<ServerConfig>, previous: Vec<Arc<ExternalMcpServer>>) -> Vec<Arc<ExternalMcpServer>> {
+fn build_servers(
+    configs: Vec<ServerConfig>,
+    previous: Vec<Arc<ExternalMcpServer>>,
+) -> Vec<Arc<ExternalMcpServer>> {
     let mut seen_names = BTreeSet::new();
-    configs.into_iter().take(MAX_SERVERS)
+    configs
+        .into_iter()
+        .take(MAX_SERVERS)
         .filter(|config| seen_names.insert(config.name.clone()))
         .filter(|config| config.enabled)
         .filter_map(|config| {
@@ -163,7 +193,8 @@ fn build_servers(configs: Vec<ServerConfig>, previous: Vec<Arc<ExternalMcpServer
                 return Some(Arc::clone(existing));
             }
             ExternalMcpServer::new(config).map(Arc::new)
-        }).collect()
+        })
+        .collect()
 }
 
 impl ExternalMcpServer {
@@ -173,7 +204,10 @@ impl ExternalMcpServer {
         }
         let endpoint = safe_endpoint(&config.endpoint)?;
         let bearer_token = config.bearer_token.filter(|token| {
-            !token.is_empty() && token.len() <= 4096 && !token.contains('\r') && !token.contains('\n')
+            !token.is_empty()
+                && token.len() <= 4096
+                && !token.contains('\r')
+                && !token.contains('\n')
         });
         let client = Client::builder()
             .redirect(reqwest::redirect::Policy::none())
@@ -194,13 +228,17 @@ impl ExternalMcpServer {
 
     async fn tools(&self) -> Vec<Value> {
         let mut state = self.state.lock().await;
-        if state.refreshed_at.is_some_and(|at| at.elapsed() < CACHE_TTL) {
+        if state
+            .refreshed_at
+            .is_some_and(|at| at.elapsed() < CACHE_TTL)
+        {
             return namespace_tools(&self.name, &state.tools);
         }
         let result = async {
             self.ensure_initialized(&mut state).await?;
             let response = self.rpc(&mut state, "tools/list", json!({})).await?;
-            let tools = response.pointer("/result/tools")
+            let tools = response
+                .pointer("/result/tools")
                 .and_then(Value::as_array)
                 .cloned()
                 .ok_or_else(|| "remote tools/list reply has no tools array".to_owned())?;
@@ -208,7 +246,8 @@ impl ExternalMcpServer {
                 return Err("remote MCP tool count exceeds the configured limit".to_owned());
             }
             Ok::<_, String>(tools)
-        }.await;
+        }
+        .await;
         match result {
             Ok(tools) => {
                 state.tools = tools;
@@ -228,9 +267,14 @@ impl ExternalMcpServer {
         }
         let mut state = self.state.lock().await;
         self.ensure_initialized(&mut state).await?;
-        if !state.tools.iter().any(|tool| tool.get("name").and_then(Value::as_str) == Some(tool_name)) {
+        if !state
+            .tools
+            .iter()
+            .any(|tool| tool.get("name").and_then(Value::as_str) == Some(tool_name))
+        {
             let response = self.rpc(&mut state, "tools/list", json!({})).await?;
-            state.tools = response.pointer("/result/tools")
+            state.tools = response
+                .pointer("/result/tools")
                 .and_then(Value::as_array)
                 .cloned()
                 .ok_or_else(|| "remote tools/list reply has no tools array".to_owned())?;
@@ -239,15 +283,23 @@ impl ExternalMcpServer {
             }
             state.refreshed_at = Some(Instant::now());
         }
-        if !state.tools.iter().any(|tool| tool.get("name").and_then(Value::as_str) == Some(tool_name)) {
+        if !state
+            .tools
+            .iter()
+            .any(|tool| tool.get("name").and_then(Value::as_str) == Some(tool_name))
+        {
             return Err("remote tool is not currently advertised".to_owned());
         }
-        let response = self.rpc(
-            &mut state,
-            "tools/call",
-            json!({"name": tool_name, "arguments": arguments}),
-        ).await?;
-        response.get("result").cloned()
+        let response = self
+            .rpc(
+                &mut state,
+                "tools/call",
+                json!({"name": tool_name, "arguments": arguments}),
+            )
+            .await?;
+        response
+            .get("result")
+            .cloned()
             .ok_or_else(|| "remote tools/call reply has no result".to_owned())
     }
 
@@ -255,22 +307,26 @@ impl ExternalMcpServer {
         if state.initialized {
             return Ok(());
         }
-        let response = self.rpc(
-            state,
-            "initialize",
-            json!({
-                "protocolVersion": "2025-03-26",
-                "capabilities": {},
-                "clientInfo": {"name": "droidbridge-mcp-proxy", "version": "0.5.9"}
-            }),
-        ).await?;
+        let response = self
+            .rpc(
+                state,
+                "initialize",
+                json!({
+                    "protocolVersion": "2025-03-26",
+                    "capabilities": {},
+                    "clientInfo": {"name": "droidbridge-mcp-proxy", "version": "0.5.9"}
+                }),
+            )
+            .await?;
         if response.get("result").is_none() {
             return Err("remote MCP initialize reply is invalid".to_owned());
         }
         state.initialized = true;
 
         // Best-effort notification: some compatible MCP servers are stateless.
-        let mut request = self.client.post(self.endpoint.clone())
+        let mut request = self
+            .client
+            .post(self.endpoint.clone())
             .header(header::CONTENT_TYPE, "application/json")
             .header(header::ACCEPT, "application/json, text/event-stream")
             .header("MCP-Protocol-Version", "2025-03-26")
@@ -285,22 +341,33 @@ impl ExternalMcpServer {
         Ok(())
     }
 
-    async fn rpc(&self, state: &mut RemoteState, method: &str, params: Value) -> Result<Value, String> {
+    async fn rpc(
+        &self,
+        state: &mut RemoteState,
+        method: &str,
+        params: Value,
+    ) -> Result<Value, String> {
         let result = self.rpc_once(state, method, params.clone()).await;
-        if result.as_ref().err().is_some_and(|error| error == "MCP_SESSION_EXPIRED") {
+        if result
+            .as_ref()
+            .err()
+            .is_some_and(|error| error == "MCP_SESSION_EXPIRED")
+        {
             // Streamable HTTP servers may expire sessions while the app is suspended or the
             // network changes. Reinitialize once, then retry the original request exactly once.
             state.session_id = None;
             state.initialized = false;
-            let initialized = self.rpc_once(
-                state,
-                "initialize",
-                json!({
-                    "protocolVersion": "2025-03-26",
-                    "capabilities": {},
-                    "clientInfo": {"name": "droidbridge-mcp-proxy", "version": "0.5.9"}
-                }),
-            ).await?;
+            let initialized = self
+                .rpc_once(
+                    state,
+                    "initialize",
+                    json!({
+                        "protocolVersion": "2025-03-26",
+                        "capabilities": {},
+                        "clientInfo": {"name": "droidbridge-mcp-proxy", "version": "0.5.9"}
+                    }),
+                )
+                .await?;
             if initialized.get("result").is_none() {
                 return Err("remote MCP re-initialize reply is invalid".to_owned());
             }
@@ -310,7 +377,12 @@ impl ExternalMcpServer {
         result
     }
 
-    async fn rpc_once(&self, state: &mut RemoteState, method: &str, params: Value) -> Result<Value, String> {
+    async fn rpc_once(
+        &self,
+        state: &mut RemoteState,
+        method: &str,
+        params: Value,
+    ) -> Result<Value, String> {
         state.next_id = state.next_id.saturating_add(1).max(1);
         let request_id = state.next_id;
         let payload = json!({
@@ -319,7 +391,9 @@ impl ExternalMcpServer {
             "method": method,
             "params": params
         });
-        let mut request = self.client.post(self.endpoint.clone())
+        let mut request = self
+            .client
+            .post(self.endpoint.clone())
             .header(header::CONTENT_TYPE, "application/json")
             .header(header::ACCEPT, "application/json, text/event-stream")
             .header("MCP-Protocol-Version", "2025-03-26")
@@ -330,36 +404,52 @@ impl ExternalMcpServer {
         if let Some(token) = &self.bearer_token {
             request = request.bearer_auth(token);
         }
-        let response = request.send().await
+        let response = request
+            .send()
+            .await
             .map_err(|_| "remote MCP endpoint is unavailable".to_owned())?;
-        if let Some(session) = response.headers().get("MCP-Session-Id")
-            .and_then(|value| value.to_str().ok()) {
+        if let Some(session) = response
+            .headers()
+            .get("MCP-Session-Id")
+            .and_then(|value| value.to_str().ok())
+        {
             state.session_id = Some(session.to_owned());
         }
         if response.status() == reqwest::StatusCode::NOT_FOUND && state.session_id.is_some() {
             return Err("MCP_SESSION_EXPIRED".to_owned());
         }
         if !response.status().is_success() {
-            return Err(format!("remote MCP endpoint returned HTTP {}", response.status().as_u16()));
+            return Err(format!(
+                "remote MCP endpoint returned HTTP {}",
+                response.status().as_u16()
+            ));
         }
-        let content_type = response.headers().get(header::CONTENT_TYPE)
+        let content_type = response
+            .headers()
+            .get(header::CONTENT_TYPE)
             .and_then(|value| value.to_str().ok())
             .unwrap_or("")
             .to_ascii_lowercase();
-        if response.content_length().is_some_and(|length| length > MAX_RESPONSE_BYTES as u64) {
+        if response
+            .content_length()
+            .is_some_and(|length| length > MAX_RESPONSE_BYTES as u64)
+        {
             return Err("remote MCP response exceeds the 2 MiB limit".to_owned());
         }
         let mut response = response;
         let mut bytes = Vec::new();
-        while let Some(chunk) = response.chunk().await
-            .map_err(|_| "remote MCP response could not be read".to_owned())? {
+        while let Some(chunk) = response
+            .chunk()
+            .await
+            .map_err(|_| "remote MCP response could not be read".to_owned())?
+        {
             if bytes.len().saturating_add(chunk.len()) > MAX_RESPONSE_BYTES {
                 return Err("remote MCP response exceeds the 2 MiB limit".to_owned());
             }
             bytes.extend_from_slice(&chunk);
         }
-        let text = String::from_utf8(bytes)
-            .map_err(|_| "remote MCP response is not UTF-8".to_owned())?;
+        let text =
+            String::from_utf8(bytes).map_err(|_| "remote MCP response is not UTF-8".to_owned())?;
         let body = if content_type.starts_with("text/event-stream") {
             text.lines()
                 .filter_map(|line| line.strip_prefix("data:"))
@@ -377,8 +467,11 @@ impl ExternalMcpServer {
             return Err("remote MCP response id does not match the request".to_owned());
         }
         if let Some(error) = value.get("error") {
-            return Err(error.get("message").and_then(Value::as_str)
-                .unwrap_or("remote MCP error").to_owned());
+            return Err(error
+                .get("message")
+                .and_then(Value::as_str)
+                .unwrap_or("remote MCP error")
+                .to_owned());
         }
         Ok(value)
     }
