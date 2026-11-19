@@ -268,6 +268,56 @@ private fun RowDivider() {
     )
 }
 
+/** A small reusable single-choice dialog used by the remaining Settings preferences. */
+@Composable
+private fun <T> ChoiceDialog(
+    @StringRes title: Int,
+    tag: String,
+    options: List<T>,
+    selected: T,
+    optionTag: (T) -> String,
+    label: @Composable (T) -> String,
+    onSelect: (T) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(title)) },
+        text = {
+            Column {
+                options.forEach { option ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .selectable(
+                                selected = option == selected,
+                                role = Role.RadioButton,
+                                onClick = {
+                                    onSelect(option)
+                                    onDismiss()
+                                },
+                            )
+                            .testTag("$tag:${optionTag(option)}")
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(
+                            selected = option == selected,
+                            onClick = null,
+                        )
+                        Text(label(option), modifier = Modifier.padding(start = 12.dp))
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.action_cancel))
+            }
+        },
+    )
+}
+
 @StringRes
 private fun themeLabel(theme: ThemePreference): Int = when (theme) {
     ThemePreference.System -> R.string.theme_system
