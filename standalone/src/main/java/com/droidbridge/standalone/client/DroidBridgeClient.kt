@@ -159,6 +159,13 @@ class DroidBridgeClient(
 
     override suspend fun clearTunnel(): String = mcpCall(IDroidBridgeRuntime::clearTunnel)
 
+    override suspend fun externalMcpSettings(): String = mcpCall(IDroidBridgeRuntime::getExternalMcpSettings)
+
+    override suspend fun replaceExternalMcpServices(servicesJson: String): String =
+        mcpCall { it.replaceExternalMcpServices(servicesJson) }
+
+    override suspend fun reloadExternalMcpServices(): String = mcpCall(IDroidBridgeRuntime::reloadExternalMcpServices)
+
     /** The S-UI-017 `{schema_version,blocker,cleanup}` reply or `{error}`. */
     override suspend fun maintenanceState(): String = mcpCall(IDroidBridgeRuntime::getMaintenanceState)
 
