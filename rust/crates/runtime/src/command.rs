@@ -665,6 +665,7 @@ where
     let result = match command_result(
         &settlement.outcome,
         input,
+        settlement.actual_run_as,
         execution.executor.execution_class,
         duration_ms,
         &artifacts,
@@ -759,6 +760,7 @@ fn command_cancellation(
 fn command_result<A: ArtifactPort>(
     outcome: &CommandProcessOutcome,
     input: &CommandRunInput,
+    actual_run_as: Option<RunAs>,
     execution_class: contract::ExecutionClass,
     duration_ms: u64,
     artifacts: &A,
@@ -784,6 +786,18 @@ fn command_result<A: ArtifactPort>(
             ));
         }
     };
+    let actual_run_as = actual_run_as.ok_or_else(|| {
+        DomainError::new(
+            ErrorCode::PermissionDenied,
+            "command executor did not attest its operating-system identity",
+        )
+    })?;
+    if actual_run_as != input.run_as {
+        return Err(DomainError::new(
+            ErrorCode::PermissionDenied,
+            "command executor identity does not match the requested identity",
+        ));
+    }
     let mut result = CommandResult {
         state,
         failure_code,
@@ -791,7 +805,7 @@ fn command_result<A: ArtifactPort>(
             .then_some(outcome.exit_code)
             .flatten(),
         requested_run_as: input.run_as,
-        actual_run_as: input.run_as,
+        actual_run_as,
         execution_class,
         duration_ms,
         stdout: None,
