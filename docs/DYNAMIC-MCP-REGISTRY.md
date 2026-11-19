@@ -1,6 +1,6 @@
 # Dynamic MCP Registry for DroidBridge Root
 
-Status: implementation in progress on `feature/dynamic-mcp-registry`. The current branch contains the shared registry, facade routing, root-daemon operations, root UI, root-only persistence, and CI jobs. Automated validation and Android artifact build remain the release gates.
+Status: implementation in progress on `feature/dynamic-mcp-registry`. The current branch contains the shared registry, facade routing, root-daemon operations, root UI, root-only persistence, and CI jobs. Rust formatting/workspace tests are passing; the Android artifact build is being repaired and remains a release gate.
 
 ## Goal
 
@@ -41,7 +41,7 @@ Keep DroidBridge's native MCP tools and the existing OpenAI Secure Tunnel unchan
    - Daemon operations implemented: `mcp_servers_list`, `mcp_server_add`, `mcp_server_remove`, `mcp_server_set_enabled`, and `mcp_server_refresh` (refresh also serves as the connection test).
    - Persist service metadata and bearer credentials in `mcp-servers.json` under the daemon's root-only state directory (0600); redact secrets from list/status responses.
    - Commit configuration atomically before publishing it to the shared registry.
-   - Validate endpoint and perform a discovery test before enabling a newly added service.
+   - New servers are persisted and enabled by default, then discovery is attempted. A failed discovery leaves the server registered with a redacted status error so the user can retry; no external tools are published until discovery succeeds.
 
 5. **Root frontend**
    - Add a dedicated MCP Servers settings section.
@@ -60,7 +60,7 @@ Keep DroidBridge's native MCP tools and the existing OpenAI Secure Tunnel unchan
 - Do not restart the Secure Tunnel when the registry changes.
 - Keep existing native tool names, schemas, and behavior byte-for-byte compatible.
 
-## Acceptance tests
+## Release acceptance criteria and current test coverage
 
 - Native tools remain present and unchanged with an empty registry.
 - Enabled service tools appear with stable namespaced names; disabled services do not.
@@ -79,6 +79,8 @@ No device files are changed until the branch has passing automated checks and a 
 
 
 ## Current implementation notes
+
+- Current automated coverage includes private endpoint allow-listing (including rejection of IPv4 link-local metadata addresses), credential redaction, disabled-service hiding, Streamable HTTP initialization/session propagation, discovery, and a real forwarded tool call against a mock server. Timeout/oversize/malformed-response and end-to-end tunnel/UI tests remain additional hardening work.
 
 - Dynamic tools are named `<service_id>__<upstream_tool_name>`; service IDs reserve the double-underscore separator.
 - The root daemon owns one `DynamicMcpRegistry`; cloned handles are passed to both `McpListener` and `TunnelClient`. Registry changes are therefore visible to both without restarting the Secure Tunnel.
