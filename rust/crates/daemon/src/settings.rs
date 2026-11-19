@@ -17,11 +17,11 @@ use std::{
 const MCP_FILE: &str = "mcp.json";
 const TUNNEL_FILE: &str = "tunnel.json";
 const EXTERNAL_MCP_FILE: &str = "external-mcp.json";
-const MAX_EXTERNAL_MCP_BYTES: u64 = 65_536;
+const MAX_EXTERNAL_MCP_BYTES: u64 = 400_000;
 const SCHEMA_VERSION: u32 = 1;
 const TOKEN_BYTES: usize = 32;
 const MAX_API_KEY_BYTES: usize = 512;
-const MAX_SETTINGS_BYTES: u64 = 4_096;
+const MAX_SETTINGS_BYTES: u64 = 400_000;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
