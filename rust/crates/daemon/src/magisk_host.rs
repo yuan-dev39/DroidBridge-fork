@@ -1269,17 +1269,25 @@ fn secure_setting_contains(name: &str, package: &str) -> Option<bool> {
 }
 
 fn package_permission(package: &str, permission: &str) -> Option<bool> {
-    let output = Command::new("/system/bin/cmd")
-        .args(["package", "check-permission", permission, package, "0"])
+    // Android builds do not consistently expose the package check-permission command.
+    // dumpsys package reports the authoritative runtime-permission grant line.
+    let output = Command::new("/system/bin/dumpsys")
+        .args(["package", package])
         .output()
         .ok()?;
     if !output.status.success() {
         return None;
     }
-    match String::from_utf8_lossy(&output.stdout).trim() {
-        "granted" => Some(true),
-        "denied" => Some(false),
-        _ => None,
+    let needle = format!("{permission}: granted=");
+    let line = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .find(|line| line.contains(&needle))?;
+    if line.contains("granted=true") {
+        Some(true)
+    } else if line.contains("granted=false") {
+        Some(false)
+    } else {
+        None
     }
 }
 
