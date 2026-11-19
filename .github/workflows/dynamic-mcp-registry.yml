@@ -82,6 +82,12 @@ jobs:
             :root-frontend:assembleDebugMagiskModule \
             :root-frontend:assembleStableMagiskModule \
             --no-daemon
+      - name: Run Android unit tests
+        run: |
+          bash ./gradlew \
+            :root-frontend:testDebugUnitTest \
+            :standalone:testDebugUnitTest \
+            --no-daemon
       - name: Build standalone Shizuku APK
         run: bash ./gradlew :standalone:packageShizukuDebugApk --no-daemon
       - uses: actions/upload-artifact@v4
