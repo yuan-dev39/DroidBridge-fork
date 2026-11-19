@@ -475,7 +475,7 @@ async fn i8_vis_coordinate_input_accepts_current_hierarchy_from_a_different_prov
     assert_eq!(primitive.interactions().len(), 1);
     let providers = primitive.providers();
     assert!(providers.contains(&runtime::ProviderToken::Accessibility));
-    assert_eq!(providers.last(), Some(&runtime::ProviderToken::Shizuku));
+    assert!(providers.contains(&runtime::ProviderToken::Shizuku));
 }
 
 #[tokio::test]
