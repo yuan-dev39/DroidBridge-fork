@@ -79,6 +79,18 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
         json!({"schema_version": 1, "services": services})
     }
 
+    pub(crate) fn external_mcp_reload(&mut self) -> Value {
+        let raw = match self.settings.external_mcp() {
+            Ok(Some(raw)) => raw,
+            Ok(None) => return json!({"schema_version": 1, "reloaded": true, "service_count": 0}),
+            Err(_) => return failure("IO_ERROR"),
+        };
+        match self.external_registry.replace_json(&raw) {
+            Ok(()) => json!({"schema_version": 1, "reloaded": true}),
+            Err(code) => failure(code),
+        }
+    }
+
     pub(crate) fn external_mcp_replace(&mut self, raw: &str) -> Value {
         // Validate before committing. The probe is isolated and performs no network requests.
         let probe = ExternalMcpRegistry::from_environment();
