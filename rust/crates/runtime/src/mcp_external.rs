@@ -235,6 +235,31 @@ impl ExternalMcpServer {
     }
 
     async fn rpc(&self, state: &mut RemoteState, method: &str, params: Value) -> Result<Value, String> {
+        let result = self.rpc_once(state, method, params.clone()).await;
+        if result.as_ref().err().is_some_and(|error| error == "MCP_SESSION_EXPIRED") {
+            // Streamable HTTP servers may expire sessions while the app is suspended or the
+            // network changes. Reinitialize once, then retry the original request exactly once.
+            state.session_id = None;
+            state.initialized = false;
+            let initialized = self.rpc_once(
+                state,
+                "initialize",
+                json!({
+                    "protocolVersion": "2025-03-26",
+                    "capabilities": {},
+                    "clientInfo": {"name": "droidbridge-mcp-proxy", "version": "0.5.9"}
+                }),
+            ).await?;
+            if initialized.get("result").is_none() {
+                return Err("remote MCP re-initialize reply is invalid".to_owned());
+            }
+            state.initialized = true;
+            return self.rpc_once(state, method, params).await;
+        }
+        result
+    }
+
+    async fn rpc_once(&self, state: &mut RemoteState, method: &str, params: Value) -> Result<Value, String> {
         state.next_id = state.next_id.saturating_add(1).max(1);
         let request_id = state.next_id;
         let payload = json!({
@@ -259,6 +284,9 @@ impl ExternalMcpServer {
         if let Some(session) = response.headers().get("MCP-Session-Id")
             .and_then(|value| value.to_str().ok()) {
             state.session_id = Some(session.to_owned());
+        }
+        if response.status() == reqwest::StatusCode::NOT_FOUND && state.session_id.is_some() {
+            return Err("MCP_SESSION_EXPIRED".to_owned());
         }
         if !response.status().is_success() {
             return Err(format!("remote MCP endpoint returned HTTP {}", response.status().as_u16()));
