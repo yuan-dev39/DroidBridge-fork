@@ -18,6 +18,7 @@ use std::{
 const MCP_FILE: &str = "mcp.json";
 const TUNNEL_FILE: &str = "tunnel.json";
 const MCP_SERVERS_FILE: &str = "mcp-servers.json";
+const MCP_LAN_FILE: &str = "mcp-lan.json";
 const SCHEMA_VERSION: u32 = 1;
 const TOKEN_BYTES: usize = 32;
 const MAX_API_KEY_BYTES: usize = 512;
@@ -68,6 +69,32 @@ impl TunnelSettings {
 struct McpServersSettings {
     schema_version: u32,
     servers: Vec<McpServerConfig>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct McpLanSettings {
+    schema_version: u32,
+    pub(crate) enabled: bool,
+    pub(crate) port: u16,
+    pub(crate) token: String,
+}
+
+impl McpLanSettings {
+    fn new() -> Result<Self, DomainError> {
+        Ok(Self {
+            schema_version: SCHEMA_VERSION,
+            enabled: false,
+            port: 18767,
+            token: new_token()?,
+        })
+    }
+
+    fn valid(&self) -> bool {
+        self.schema_version == SCHEMA_VERSION
+            && (1024..=65535).contains(&self.port)
+            && valid_token(&self.token)
+    }
 }
 
 pub(crate) struct SettingsStore {
@@ -140,6 +167,29 @@ impl SettingsStore {
                 servers: servers.to_vec(),
             },
         )
+    }
+
+    /// The committed LAN MCP settings; first use creates a disabled listener and a unique token.
+    pub(crate) fn mcp_lan(&self) -> Result<McpLanSettings, DomainError> {
+        match read_settings::<McpLanSettings>(&self.base.join(MCP_LAN_FILE))? {
+            Some(settings) if settings.valid() => Ok(settings),
+            Some(_) => Err(DomainError::new(
+                ErrorCode::IoError,
+                "LAN MCP settings are invalid",
+            )),
+            None => {
+                let settings = McpLanSettings::new()?;
+                self.commit_mcp_lan(&settings)?;
+                Ok(settings)
+            }
+        }
+    }
+
+    pub(crate) fn commit_mcp_lan(&self, settings: &McpLanSettings) -> Result<(), DomainError> {
+        if !settings.valid() {
+            return Err(DomainError::invalid("invalid LAN MCP settings"));
+        }
+        write_settings(&self.base, MCP_LAN_FILE, settings)
     }
 
     /// The committed tunnel settings, or none while no tunnel is configured.
