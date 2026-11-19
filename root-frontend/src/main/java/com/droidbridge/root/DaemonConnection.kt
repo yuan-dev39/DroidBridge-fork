@@ -94,6 +94,24 @@ class DaemonConnection(
         return reply.toString().encodeToByteArray()
     }
 
+    suspend fun mcpServersList(): String = request("mcp_servers_list").toString()
+
+    suspend fun addMcpServer(id: String, displayName: String, endpoint: String, bearerToken: String?): String =
+        request("mcp_server_add", buildJsonObject {
+            put("id", id); put("display_name", displayName); put("endpoint", endpoint)
+            if (!bearerToken.isNullOrBlank()) put("bearer_token", bearerToken)
+            put("enabled", true)
+        }).toString()
+
+    suspend fun removeMcpServer(id: String): String =
+        request("mcp_server_remove", buildJsonObject { put("id", id) }).toString()
+
+    suspend fun setMcpServerEnabled(id: String, enabled: Boolean): String =
+        request("mcp_server_set_enabled", buildJsonObject { put("id", id); put("enabled", enabled) }).toString()
+
+    suspend fun refreshMcpServer(id: String): String =
+        request("mcp_server_refresh", buildJsonObject { put("id", id) }).toString()
+
     override suspend fun mcpSettings(): String = request("mcp_settings").toString()
 
     override suspend fun setMcpEnabled(enabled: Boolean): String =
