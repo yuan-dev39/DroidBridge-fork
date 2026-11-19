@@ -39,7 +39,7 @@ jobs:
           "ANDROID_SDK_ROOT=$sdkRoot" | Out-File -FilePath $env:GITHUB_ENV -Append
           1..100 | ForEach-Object { "y" } | & $sdkManager.FullName --licenses
           if ($LASTEXITCODE -ne 0) { throw "Android SDK license acceptance failed" }
-          & $sdkManager.FullName --install "platforms;android-36" "platforms;android-37.0" "build-tools;36.0.0" "build-tools;37.0.0" "ndk;29.0.14206865"
+          & $sdkManager.FullName --install "platforms;android-36" "platforms;android-37.0" "build-tools;36.0.0" "build-tools;37.0.0" "cmake;3.31.6" "ndk;29.0.14206865"
           if ($LASTEXITCODE -ne 0) { throw "Android SDK package installation failed" }
 
       - uses: dtolnay/rust-toolchain@stable
@@ -76,7 +76,13 @@ jobs:
             throw "Android 37 canonical platform path is not usable"
           }
 
-      - name: Build standalone Shizuku APK and Root debug module
+      - name: Build pinned Android libpcap static dependency
+        shell: pwsh
+        run: |
+          $sdkPath = $env:ANDROID_SDK_ROOT.Replace("\\", "\\\\")
+          "sdk.dir=$sdkPath" | Out-File -FilePath local.properties -Encoding ascii
+          ./tools/build-libpcap.ps1 -CacheRoot build/i0-cache
+\n      - name: Build standalone Shizuku APK and Root debug module
         shell: pwsh
         run: |
           ./gradlew.bat --no-daemon --dependency-verification=off :standalone:testDebugUnitTest :standalone:assembleDebug :root-frontend:assembleDebugMagiskModule
