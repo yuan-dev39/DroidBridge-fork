@@ -192,7 +192,12 @@ impl DynamicMcpRegistry {
         response.value.get("result").cloned().ok_or(RegistryError::Upstream("missing tool result"))
     }
 }
-fn valid_id(v: &str) -> bool { !v.is_empty() && v.len() <= 32 && v.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_') }
+fn valid_id(v: &str) -> bool {
+    !v.is_empty()
+        && v.len() <= 32
+        && !v.contains("__")
+        && v.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')
+}
 fn valid_tool_name(v: &str) -> bool { !v.is_empty() && v.len() <= 128 && v.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-' || b == b'.') }
 
 #[derive(Debug)]
