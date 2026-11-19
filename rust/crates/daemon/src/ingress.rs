@@ -104,15 +104,45 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
     }
 
     pub(crate) fn external_mcp_replace(&mut self, raw: &str) -> Value {
-        // Validate before committing. The probe is isolated and performs no network requests.
-        let probe = ExternalMcpRegistry::from_environment();
-        if let Err(code) = probe.replace_json(raw) { return failure(code); }
+        // An omitted credential means "keep the existing one" for a service with the same name.
+        // An explicit JSON null means "clear it". The effective snapshot is what gets validated
+        // and persisted, so credentials never need to be returned to the frontend.
+        let mut incoming: Vec<Value> = match serde_json::from_str(raw) {
+            Ok(value) => value,
+            Err(_) => return failure("INVALID_CONFIG"),
+        };
         let previous = match self.settings.external_mcp() {
             Ok(previous) => previous,
             Err(_) => return failure("IO_ERROR"),
         };
-        if self.settings.commit_external_mcp(raw).is_err() { return failure("PERSISTENCE_FAILED"); }
-        if let Err(code) = self.external_registry.replace_json(raw) {
+        if let Some(previous_raw) = previous.as_deref() {
+            if let Ok(previous_services) = serde_json::from_str::<Vec<Value>>(previous_raw) {
+                for service in &mut incoming {
+                    let Some(name) = service.get("name").and_then(Value::as_str) else { continue };
+                    let has_credential_field = service.as_object().is_some_and(|object| object.contains_key("bearer_token"));
+                    if !has_credential_field {
+                        if let Some(token) = previous_services.iter()
+                            .find(|old| old.get("name").and_then(Value::as_str) == Some(name))
+                            .and_then(|old| old.get("bearer_token"))
+                            .filter(|token| !token.is_null())
+                            .cloned()
+                        {
+                            if let Some(object) = service.as_object_mut() {
+                                object.insert("bearer_token".to_owned(), token);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        let effective_raw = match serde_json::to_string(&incoming) {
+            Ok(value) => value,
+            Err(_) => return failure("INVALID_CONFIG"),
+        };
+        let probe = ExternalMcpRegistry::from_environment();
+        if let Err(code) = probe.replace_json(&effective_raw) { return failure(code); }
+        if self.settings.commit_external_mcp(&effective_raw).is_err() { return failure("PERSISTENCE_FAILED"); }
+        if let Err(code) = self.external_registry.replace_json(&effective_raw) {
             if let Some(previous) = previous {
                 let _ = self.settings.commit_external_mcp(&previous);
                 let _ = self.external_registry.replace_json(&previous);
@@ -121,7 +151,7 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
             }
             return failure(code);
         }
-        json!({"schema_version": 1, "applied": true, "service_count": serde_json::from_str::<Vec<Value>>(raw).map(|v| v.len()).unwrap_or(0)})
+        json!({"schema_version": 1, "applied": true, "service_count": incoming.len()})
     }
 
     pub(crate) fn mcp_settings(&mut self) -> Value {
