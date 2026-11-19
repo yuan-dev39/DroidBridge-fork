@@ -48,6 +48,7 @@ servers. Invalid or oversized JSON fails closed (no external servers).
 - Discovery runs concurrently with a four-second per-server deadline. One unavailable server
   does not block healthy servers or the native catalog.
 - Per-server clients, sessions, credentials and 15-second tool caches are isolated.
+- If a server returns HTTP 404 for an established session, the client clears that session, reinitializes once and retries the original request once; other failures are not blindly retried.
 - Remote response bodies are capped at 2 MiB and tool-call arguments are forwarded as JSON objects.
 
 ## Localization
