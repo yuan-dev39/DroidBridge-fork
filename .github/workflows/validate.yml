@@ -88,6 +88,6 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Compile standalone APK Kotlin and AIDL
         run: |
-          sed -i 's/compileSdk = 37/compileSdk = 36/' ui-common/build.gradle.kts standalone/build.gradle.kts
+          sed -i 's/compileSdk = 37/compileSdk = 36/' ui-common/build.gradle.kts root-frontend/build.gradle.kts standalone/build.gradle.kts
           chmod +x ./gradlew
           ./gradlew --no-daemon --dependency-verification=off :standalone:compileDebugKotlin
