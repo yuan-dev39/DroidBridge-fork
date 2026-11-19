@@ -25,6 +25,13 @@ pub(crate) struct DaemonIngress<H> {
 
 impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
     pub(crate) fn new(settings: SettingsStore, port: u16) -> Self {
+        let external_registry = {
+            let registry = ExternalMcpRegistry::from_environment();
+            if let Ok(Some(raw)) = settings.external_mcp() {
+                let _ = registry.replace_json(&raw);
+            }
+            registry
+        };
         Self {
             settings,
             port,
@@ -34,13 +41,7 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
             listener_failed: false,
             tunnel: None,
             tunnel_failed: false,
-            external_registry: {
-                let registry = ExternalMcpRegistry::from_environment();
-                if let Ok(Some(raw)) = settings.external_mcp() {
-                    let _ = registry.replace_json(&raw);
-                }
-                registry
-            },
+            external_registry,
         }
     }
 
