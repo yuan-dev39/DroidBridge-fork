@@ -608,6 +608,7 @@ impl RootCommandGuard {
         claim: &LocalExecutionClaim,
         stdout_file: Option<fs::File>,
     ) -> Result<CommandProcessSettlement, ExecutionFailure> {
+        #[cfg(target_os = "android")]
         if unsafe { libc::geteuid() } != 0 {
             return Err(pre_start(DomainError::new(
                 ErrorCode::PermissionDenied,
