@@ -23,3 +23,12 @@ jobs:
       - name: Run visual integration tests
         working-directory: rust
         run: cargo test -p runtime --test i8_vis
+      - name: Run command identity regression tests
+        working-directory: rust
+        run: cargo test -p runtime --test i8_cmd
+      - name: Compile and test App native execution
+        working-directory: rust
+        run: cargo test -p app_native
+      - name: Compile and test Magisk daemon execution
+        working-directory: rust
+        run: cargo test -p daemon
