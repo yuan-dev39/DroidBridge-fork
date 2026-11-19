@@ -456,7 +456,7 @@ internal class ShizukuController(
         if (reason == "CLEANUP_UNVERIFIED") cleanupQuarantined = true
         if (cleanupQuarantined) {
             publish(
-                observe(connecting = false).copy(userServiceUid = current.effectiveUid),
+                observe(connecting = false).copy(userServiceUid = candidate.effectiveUid),
                 null,
                 guardState,
                 reason,
