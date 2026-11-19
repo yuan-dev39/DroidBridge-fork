@@ -109,7 +109,7 @@ fun McpServersRoute(connection: DaemonConnection, onBack: () -> Unit) {
                         Text(stringResource(if (lanEnabled) R.string.mcp_lan_disable else R.string.mcp_lan_enable))
                     }
                     Button(
-                        enabled = lanPortInput.toIntOrNull() in 1024..65535,
+                        enabled = lanPortInput.toIntOrNull()?.let { it in 1024..65535 } == true,
                         onClick = {
                             scope.launch {
                                 runCatching { connection.setMcpLanPort(lanPortInput.toInt()) }
