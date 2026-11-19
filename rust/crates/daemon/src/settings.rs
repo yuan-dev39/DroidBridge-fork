@@ -247,6 +247,9 @@ fn write_settings<T: Serialize>(base: &Path, name: &str, value: &T) -> Result<()
         .mode(0o600)
         .open(&temporary)
         .and_then(|mut file| {
+            // OpenOptions::mode only applies on creation; reset permissions on an existing
+            // stale temporary file before writing credentials into it.
+            file.set_permissions(fs::Permissions::from_mode(0o600))?;
             file.write_all(&body)?;
             file.sync_all()
         })
