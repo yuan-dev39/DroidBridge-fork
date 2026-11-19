@@ -185,9 +185,20 @@ impl DynamicMcpRegistry {
                 && e.tools.iter().any(|t| t.published_name == published_name))
                 .ok_or(RegistryError::Invalid("unknown or disabled tool"))?;
             let tool = entry.tools.iter().find(|t| t.published_name == published_name).ok_or(RegistryError::Unavailable)?;
-            (entry.config.clone().ok_or(RegistryError::Unavailable)?, tool.upstream_name.clone(), entry.session_id.clone())
+            (
+                entry.config.clone().ok_or(RegistryError::Unavailable)?,
+                tool.upstream_name.clone(),
+                entry.session_id.clone(),
+                entry.protocol_version.clone(),
+            )
         };
-        let response = send_rpc(&config, session.as_deref(), "tools/call", json!({"name":upstream_name,"arguments":arguments})).await?;
+        let response = send_rpc(
+            &config,
+            session.as_deref(),
+            protocol_version.as_deref(),
+            "tools/call",
+            json!({"name":upstream_name,"arguments":arguments}),
+        ).await?;
         if response.value.get("error").is_some() { return Err(RegistryError::Upstream("upstream tool call failed")); }
         response.value.get("result").cloned().ok_or(RegistryError::Upstream("missing tool result"))
     }
@@ -196,9 +207,15 @@ fn valid_id(v: &str) -> bool {
     !v.is_empty()
         && v.len() <= 32
         && !v.contains("__")
+        && !v.ends_with('_')
         && v.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')
 }
-fn valid_tool_name(v: &str) -> bool { !v.is_empty() && v.len() <= 128 && v.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-' || b == b'.') }
+fn valid_tool_name(v: &str) -> bool {
+    !v.is_empty()
+        && v.len() <= 128
+        && !v.starts_with('_')
+        && v.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-' || b == b'.')
+}
 
 #[derive(Debug)]
 struct RpcReply {
@@ -207,21 +224,42 @@ struct RpcReply {
 }
 
 async fn discover(config: &McpServerConfig) -> Result<(Vec<Value>, String, Option<String>), RegistryError> {
-    let init = send_rpc(config, None, "initialize", json!({
-        "protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"DroidBridge","version":env!("CARGO_PKG_VERSION")}
+    let init = send_rpc(config, None, None, "initialize", json!({
+        "protocolVersion":"2025-03-26",
+        "capabilities":{},
+        "clientInfo":{"name":"DroidBridge","version":env!("CARGO_PKG_VERSION")}
     })).await?;
-    let version = init.value.pointer("/result/protocolVersion").and_then(Value::as_str)
-        .ok_or(RegistryError::Upstream("initialize did not negotiate a protocol version"))?.to_owned();
+    let version = init.value.pointer("/result/protocolVersion")
+        .and_then(Value::as_str)
+        .ok_or(RegistryError::Upstream("initialize did not negotiate a protocol version"))?
+        .to_owned();
     let session = init.session_id.clone();
-    let _ = send_rpc(config, session.as_deref(), "notifications/initialized", json!({})).await;
-    let listed = send_rpc(config, session.as_deref(), "tools/list", json!({})).await?;
-    let tools = listed.value.pointer("/result/tools").and_then(Value::as_array)
-        .ok_or(RegistryError::Upstream("tools/list response is invalid"))?;
-    if tools.len() > MAX_TOOLS_PER_SERVER { return Err(RegistryError::Invalid("tool limit reached")); }
-    Ok((tools.clone(), version, session))
+    let _ = send_rpc(config, session.as_deref(), Some(&version), "notifications/initialized", json!({})).await;
+
+    let mut all_tools = Vec::new();
+    let mut cursor: Option<String> = None;
+    loop {
+        let params = cursor.as_ref().map(|value| json!({"cursor":value})).unwrap_or_else(|| json!({}));
+        let listed = send_rpc(config, session.as_deref(), Some(&version), "tools/list", params).await?;
+        let page = listed.value.pointer("/result/tools").and_then(Value::as_array)
+            .ok_or(RegistryError::Upstream("tools/list response is invalid"))?;
+        if all_tools.len().saturating_add(page.len()) > MAX_TOOLS_PER_SERVER {
+            return Err(RegistryError::Invalid("tool limit reached"));
+        }
+        all_tools.extend(page.iter().cloned());
+        cursor = listed.value.pointer("/result/nextCursor").and_then(Value::as_str).map(str::to_owned);
+        if cursor.is_none() { break; }
+    }
+    Ok((all_tools, version, session))
 }
 
-async fn send_rpc(config: &McpServerConfig, session: Option<&str>, method: &str, params: Value) -> Result<RpcReply, RegistryError> {
+async fn send_rpc(
+    config: &McpServerConfig,
+    session: Option<&str>,
+    protocol_version: Option<&str>,
+    method: &str,
+    params: Value,
+) -> Result<RpcReply, RegistryError> {
     let url = DynamicMcpRegistry::validate_config(config)?;
     let client = Client::builder()
         .redirect(reqwest::redirect::Policy::none())
@@ -230,7 +268,8 @@ async fn send_rpc(config: &McpServerConfig, session: Option<&str>, method: &str,
         .tls_backend_preconfigured(crate::network_tls_client_config().as_ref().clone())
         .build()
         .map_err(|_| RegistryError::Unavailable)?;
-    let mut request = client.post(url).header(CONTENT_TYPE, "application/json")
+    let mut request = client.post(url)
+        .header(CONTENT_TYPE, "application/json")
         .header(ACCEPT, "application/json, text/event-stream");
     if let Some(token) = &config.bearer_token {
         let mut value = HeaderValue::from_str(&format!("Bearer {token}"))
@@ -238,12 +277,17 @@ async fn send_rpc(config: &McpServerConfig, session: Option<&str>, method: &str,
         value.set_sensitive(true);
         request = request.header(AUTHORIZATION, value);
     }
-    if method != "initialize" { request = request.header("MCP-Protocol-Version", "2025-03-26"); }
-    if let Some(session) = session { request = request.header("Mcp-Session-Id", session); }
+    if let Some(version) = protocol_version {
+        request = request.header("MCP-Protocol-Version", version);
+    }
+    if let Some(session) = session {
+        request = request.header("Mcp-Session-Id", session);
+    }
+    let id = uuid::Uuid::new_v4().to_string();
     let body = if method.starts_with("notifications/") {
         json!({"jsonrpc":"2.0","method":method,"params":params})
     } else {
-        json!({"jsonrpc":"2.0","id":1_u64,"method":method,"params":params})
+        json!({"jsonrpc":"2.0","id":id,"method":method,"params":params})
     };
     let mut response = timeout(REQUEST_TIMEOUT, request.json(&body).send()).await
         .map_err(|_| RegistryError::Unavailable)?
@@ -265,18 +309,27 @@ async fn send_rpc(config: &McpServerConfig, session: Option<&str>, method: &str,
             return Err(RegistryError::Invalid("upstream response too large"));
         }
         bytes.extend_from_slice(&chunk);
+        if is_sse && (bytes.windows(2).any(|window| window == b"\n\n")
+            || bytes.windows(4).any(|window| window == b"\r\n\r\n")) {
+            break;
+        }
     }
     let payload = if is_sse {
-        let text = String::from_utf8(bytes).map_err(|_| RegistryError::Upstream("upstream SSE is not UTF-8"))?;
-        let data = text.lines().filter_map(|line| line.strip_prefix("data:"))
+        let text = String::from_utf8(bytes)
+            .map_err(|_| RegistryError::Upstream("upstream SSE is not UTF-8"))?;
+        text.lines().filter_map(|line| line.strip_prefix("data:"))
             .map(str::trim).filter(|line| !line.is_empty()).last()
-            .ok_or(RegistryError::Upstream("upstream SSE has no data event"))?;
-        data.to_owned()
+            .ok_or(RegistryError::Upstream("upstream SSE has no data event"))?
+            .to_owned()
     } else {
-        String::from_utf8(bytes).map_err(|_| RegistryError::Upstream("upstream response is not UTF-8"))?
+        String::from_utf8(bytes)
+            .map_err(|_| RegistryError::Upstream("upstream response is not UTF-8"))?
     };
     let value: Value = serde_json::from_str(&payload)
         .map_err(|_| RegistryError::Upstream("upstream returned invalid JSON"))?;
+    if value.get("id").and_then(Value::as_str) != Some(id.as_str()) {
+        return Err(RegistryError::Upstream("upstream response id does not match request"));
+    }
     Ok(RpcReply { value, session_id })
 }
 
