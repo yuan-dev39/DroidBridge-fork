@@ -46,6 +46,7 @@ struct ExternalMcpServer {
     state: Mutex<RemoteState>,
 }
 
+#[derive(Clone)]
 pub struct ExternalMcpRegistry {
     servers: Arc<RwLock<Vec<Arc<ExternalMcpServer>>>>,
 }
