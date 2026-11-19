@@ -16,6 +16,8 @@ use std::{
 
 const MCP_FILE: &str = "mcp.json";
 const TUNNEL_FILE: &str = "tunnel.json";
+const EXTERNAL_MCP_FILE: &str = "external-mcp.json";
+const MAX_EXTERNAL_MCP_BYTES: u64 = 65_536;
 const SCHEMA_VERSION: u32 = 1;
 const TOKEN_BYTES: usize = 32;
 const MAX_API_KEY_BYTES: usize = 512;
@@ -112,6 +114,45 @@ impl SettingsStore {
 
     pub(crate) fn commit_tunnel(&self, settings: &TunnelSettings) -> Result<(), DomainError> {
         write_settings(&self.base, TUNNEL_FILE, settings)
+    }
+
+    /// Returns the opaque external MCP service document. Callers must never include it in
+    /// status responses or logs because it may contain bearer credentials.
+    pub(crate) fn external_mcp(&self) -> Result<Option<String>, DomainError> {
+        let path = self.base.join(EXTERNAL_MCP_FILE);
+        let file = match fs::File::open(&path) {
+            Ok(file) => file,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(DomainError::os(ErrorCode::IoError, "cannot open external MCP settings", &error)),
+        };
+        let mode = file.metadata()
+            .map_err(|error| DomainError::os(ErrorCode::IoError, "cannot inspect external MCP settings", &error))?
+            .permissions().mode();
+        if mode & 0o077 != 0 {
+            return Err(DomainError::new(ErrorCode::IoError, "external MCP settings are readable by others"));
+        }
+        let mut bytes = Vec::new();
+        file.take(MAX_EXTERNAL_MCP_BYTES + 1).read_to_end(&mut bytes)
+            .map_err(|error| DomainError::os(ErrorCode::IoError, "cannot read external MCP settings", &error))?;
+        if bytes.len() as u64 > MAX_EXTERNAL_MCP_BYTES {
+            return Err(DomainError::new(ErrorCode::IoError, "external MCP settings exceed their bound"));
+        }
+        let value: serde_json::Value = serde_json::from_slice(&bytes)
+            .map_err(|_| DomainError::new(ErrorCode::IoError, "external MCP settings are invalid"))?;
+        if value.get("schema_version").and_then(serde_json::Value::as_u64) != Some(1)
+            || !value.get("services_json").and_then(serde_json::Value::as_str).is_some()
+        {
+            return Err(DomainError::new(ErrorCode::IoError, "external MCP settings schema is invalid"));
+        }
+        Ok(value.get("services_json").and_then(serde_json::Value::as_str).map(str::to_owned))
+    }
+
+    pub(crate) fn commit_external_mcp(&self, services_json: &str) -> Result<(), DomainError> {
+        if services_json.len() > 65_536 {
+            return Err(DomainError::new(ErrorCode::ResourceLimit, "external MCP settings exceed their bound"));
+        }
+        let value = serde_json::json!({"schema_version": 1, "services_json": services_json});
+        write_settings(&self.base, EXTERNAL_MCP_FILE, &value)
     }
 
     pub(crate) fn clear_tunnel(&self) -> Result<(), DomainError> {
