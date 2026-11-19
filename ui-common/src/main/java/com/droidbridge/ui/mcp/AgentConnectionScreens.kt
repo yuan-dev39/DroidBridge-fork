@@ -76,7 +76,7 @@ fun AgentConnectionRoute(
             item { WayRow(R.string.mcp_chatgpt_connection, R.drawable.ic_cloud, tunnelLabel, "agent:chatgpt", openTunnel) }
             item {
                 Button(onClick = openServers, modifier = Modifier.padding(16.dp)) {
-                    Text("Manage MCP servers")
+                    Text(stringResource(R.string.mcp_servers_manage))
                 }
             }
         }
