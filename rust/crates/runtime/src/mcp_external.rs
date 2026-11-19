@@ -84,7 +84,7 @@ impl ExternalMcpRegistry {
                 || config.endpoint.len() > 2048
                 || safe_endpoint(&config.endpoint).is_none()
                 || config.bearer_token.as_ref().is_some_and(|token| {
-                    token.len() > 4096 || token.contains('\\r') || token.contains('\\n')
+                    token.len() > 4096 || token.contains('\r') || token.contains('\n')
                 })
             {
                 return Err("INVALID_CONFIG");
