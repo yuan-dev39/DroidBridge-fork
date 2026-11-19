@@ -308,17 +308,21 @@ impl ExternalMcpServer {
         if state.initialized {
             return Ok(());
         }
-        let response = self
-            .rpc(
-                state,
-                "initialize",
-                json!({
-                    "protocolVersion": "2025-03-26",
-                    "capabilities": {},
-                    "clientInfo": {"name": "droidbridge-mcp-proxy", "version": "0.5.9"}
-                }),
-            )
-            .await?;
+        let initialize_params = json!({
+            "protocolVersion": "2025-03-26",
+            "capabilities": {},
+            "clientInfo": {"name": "droidbridge-mcp-proxy", "version": "0.5.9"}
+        });
+        let response = match self
+            .rpc_once(state, "initialize", initialize_params.clone())
+            .await
+        {
+            Err(error) if error == "MCP_SESSION_EXPIRED" => {
+                state.session_id = None;
+                self.rpc_once(state, "initialize", initialize_params).await?
+            }
+            result => result?,
+        };
         if response.get("result").is_none() {
             return Err("remote MCP initialize reply is invalid".to_owned());
         }
