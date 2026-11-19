@@ -3,7 +3,9 @@
 //! the settings only through the operations here, each of which commits before it applies and
 //! answers with the committed state.
 
-use crate::settings::{McpLanSettings, SettingsStore, TunnelSettings, valid_api_key, valid_tunnel_id};
+use crate::settings::{
+    McpLanSettings, SettingsStore, TunnelSettings, valid_api_key, valid_tunnel_id,
+};
 use runtime::dynamic_mcp::{DynamicMcpRegistry, McpServerConfig};
 use runtime::{McpFacade, McpHost, McpListener, TunnelClient, TunnelRuntime};
 use serde_json::{Value, json};
@@ -70,7 +72,11 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
     pub(crate) fn reconcile(&mut self) {
         let mcp = self.settings.mcp().ok().filter(|settings| settings.enabled);
         self.reconcile_listener(mcp.map(|settings| settings.token));
-        let lan = self.settings.mcp_lan().ok().filter(|settings| settings.enabled);
+        let lan = self
+            .settings
+            .mcp_lan()
+            .ok()
+            .filter(|settings| settings.enabled);
         self.reconcile_lan_listener(lan);
         let tunnel = self.settings.tunnel().ok().flatten();
         self.reconcile_tunnel(tunnel.filter(|settings| settings.enabled));
@@ -178,9 +184,12 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
     }
 
     fn mcp_lan_status(&self, settings: McpLanSettings) -> Value {
-        let running = self.lan_listener.as_ref().is_some_and(|(listener, _, port)| {
-            listener.state() == "running" && *port == settings.port
-        });
+        let running = self
+            .lan_listener
+            .as_ref()
+            .is_some_and(|(listener, _, port)| {
+                listener.state() == "running" && *port == settings.port
+            });
         let reason = if !settings.enabled || running {
             None
         } else if self.host.is_none() {
@@ -191,7 +200,9 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
             None
         };
         let address = local_lan_ip();
-        let endpoint = address.as_ref().map(|ip| format!("http://{ip}:{}/mcp", settings.port));
+        let endpoint = address
+            .as_ref()
+            .map(|ip| format!("http://{ip}:{}/mcp", settings.port));
         let mut status = json!({
             "schema_version": 1,
             "enabled": settings.enabled,
