@@ -406,6 +406,25 @@ fn without_identity(mut value: serde_json::Value) -> serde_json::Value {
     value
 }
 
+/// An executor must attest the identity it actually launched; missing or mismatched
+/// evidence is rejected rather than copied from the request.
+#[tokio::test]
+async fn i8_cmd_rejects_missing_or_mismatched_identity_attestation() {
+    let facts = apk_facts(APK_INSTANCE);
+    for attested in [None, Some(RunAs::Root)] {
+        let port = ScriptedPort::new();
+        let mut settlement = exited(RunAs::App, 0);
+        settlement.actual_run_as = attested;
+        port.script(RunAs::App, Ok(settlement));
+        let runner = surface(apk_capabilities(), &APK_IDENTITIES, port);
+        let call = run_call(RunAs::App, false);
+        let failure = start(&runner, admitted(facts, &call, 90))
+            .await
+            .unwrap_err();
+        assert_eq!(failure.error.code, ErrorCode::PermissionDenied);
+    }
+}
+
 /// Gate 01: both host Command surfaces project one public result and error semantics.
 #[tokio::test]
 async fn i8_cmd_g01_both_host_surfaces_share_one_public_result_and_error_semantics() {
@@ -429,7 +448,9 @@ async fn i8_cmd_g01_both_host_surfaces_share_one_public_result_and_error_semanti
         let apk_port = ScriptedPort::new();
         apk_port.script(run_as, Ok(scripted.clone()));
         let magisk_port = ScriptedPort::new();
-        magisk_port.script(RunAs::Root, Ok(scripted.clone()));
+        let mut magisk_settlement = scripted.clone();
+        magisk_settlement.actual_run_as = Some(RunAs::Root);
+        magisk_port.script(RunAs::Root, Ok(magisk_settlement));
 
         let call = run_call(run_as, false);
         let root_call = run_call(RunAs::Root, false);
