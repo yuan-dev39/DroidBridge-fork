@@ -54,4 +54,5 @@ jobs:
           # Kotlin source against the latest available stable platform without
           # changing the checked-in product SDK settings.
           sed -i 's/compileSdk = 37/compileSdk = 36/; s/targetSdk = 37/targetSdk = 36/' standalone/build.gradle.kts
+          chmod +x ./gradlew
           ./gradlew :standalone:compileDebugKotlin
