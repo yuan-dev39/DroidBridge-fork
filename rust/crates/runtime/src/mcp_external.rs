@@ -89,7 +89,7 @@ impl ExternalMcpRegistry {
                 || config.endpoint.len() > 2048
                 || safe_endpoint(&config.endpoint).is_none()
                 || config.bearer_token.as_ref().is_some_and(|token| {
-                    token.len() > 4096 || token.contains('\r') || token.contains('\n')
+                    token.len() > 4096 || token.bytes().any(|byte| !byte.is_ascii_graphic())
                 })
             {
                 return Err("INVALID_CONFIG");
@@ -517,6 +517,17 @@ mod tests {
         let registry = ExternalMcpRegistry::from_environment();
         registry.replace_json("[]").unwrap();
         assert!(registry.servers.read().unwrap().is_empty());
+    }
+
+    #[test]
+    fn disabled_services_are_not_added_to_the_active_registry() {
+        let config = ServerConfig {
+            name: "files".to_owned(),
+            endpoint: "http://127.0.0.1:9000/mcp".to_owned(),
+            enabled: false,
+            bearer_token: None,
+        };
+        assert!(build_servers(vec![config], Vec::new()).is_empty());
     }
 
     #[test]
