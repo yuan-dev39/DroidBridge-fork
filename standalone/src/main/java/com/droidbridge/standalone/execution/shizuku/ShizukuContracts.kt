@@ -74,7 +74,7 @@ internal object ShizukuCapabilityProjector {
             !observation.authorized -> ShizukuProviderState.NotAuthorized
             observation.userServiceFailed -> ShizukuProviderState.NotRunning
             observation.connecting || observation.userServiceUid == null -> ShizukuProviderState.Connecting
-            observation.userServiceUid == SHELL_UID -> ShizukuProviderState.Connected
+            observation.userServiceUid?.let(ShizukuLaunchPolicy::isSupportedUid) == true -> ShizukuProviderState.Connected
             else -> ShizukuProviderState.IncompatibleIdentity
         }
         val registrationState = when (providerState) {
@@ -100,7 +100,6 @@ internal object ShizukuCapabilityProjector {
         )
     }
 
-    private const val SHELL_UID = 2_000
 }
 
 internal class ShizukuCapabilityPublisher(
@@ -187,6 +186,16 @@ internal enum class ShizukuProbeSettlement {
 }
 
 internal object ShizukuLaunchPolicy {
+    /** Only identities that the provider actually grants are admitted; never infer privilege from UI state. */
+    fun isSupportedUid(effectiveUid: Int): Boolean =
+        effectiveUid == ROOT_UID || effectiveUid == SHELL_UID
+
+    fun privilegeMode(effectiveUid: Int): String = when (effectiveUid) {
+        ROOT_UID -> "root"
+        SHELL_UID -> "shell"
+        else -> "unsupported"
+    }
+
     fun isAdmitted(
         effectiveUid: Int,
         callerUid: Int,
@@ -195,7 +204,7 @@ internal object ShizukuLaunchPolicy {
         guardPath: String,
         activeCount: Int,
     ): Boolean =
-        effectiveUid == SHELL_UID &&
+        isSupportedUid(effectiveUid) &&
             callerUid == packageUid &&
             activeCount in 0 until MAX_GUARDS &&
             nativeDirectory.startsWith('/') &&
@@ -209,7 +218,8 @@ internal object ShizukuLaunchPolicy {
 
     const val MAX_GUARDS = 64
     const val GUARD_NAME = "libdroidbridge_exec_guard.so"
-    private const val SHELL_UID = 2_000
+    const val ROOT_UID = 0
+    const val SHELL_UID = 2_000
 }
 
 internal object ShizukuPrimitivePolicy {

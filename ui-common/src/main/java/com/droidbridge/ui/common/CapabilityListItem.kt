@@ -124,6 +124,9 @@ fun CapabilityListItem(
     CapabilityAction.OpenShizuku -> R.string.action_open_shizuku
     CapabilityAction.Authorize -> R.string.action_authorize
     CapabilityAction.OpenSettings -> R.string.action_open_settings
+    CapabilityAction.RequestLocalNetwork -> R.string.action_allow
+    CapabilityAction.OpenNotificationAccessSettings -> R.string.action_open_settings
+    CapabilityAction.OpenAccessibilitySettings -> R.string.action_open_settings
     CapabilityAction.StartCapture -> R.string.action_start_capture
     CapabilityAction.StopCapture -> R.string.action_stop_capture
     CapabilityAction.AllowBattery -> R.string.action_allow

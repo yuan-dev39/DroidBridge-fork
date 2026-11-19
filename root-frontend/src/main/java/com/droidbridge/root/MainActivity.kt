@@ -15,7 +15,7 @@ class MainActivity : ComponentActivity() {
         val viewModel = ViewModelProvider(this, object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                RootViewModel(graph.settings, graph.connection) as T
+                RootViewModel(graph.settings, graph.connection, graph.shizuku) as T
         })[RootViewModel::class.java]
         setContent {
             RootUi(viewModel, graph)

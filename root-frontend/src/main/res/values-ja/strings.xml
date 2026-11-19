@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="accessibility_service_description">DroidBridge オプションのユーザー補助サービス</string>
+    <string name="action_install_shizuku">Shizukuをインストール</string>
+    <string name="action_open_shizuku">Shizukuを開く</string>
+    <string name="cap_shizuku_title">Shizuku 接続</string>
+    <string name="shizuku_state_connected">接続済み</string>
+    <string name="shizuku_state_connecting">接続中</string>
+    <string name="shizuku_state_incompatible_identity">実行IDが非対応</string>
+    <string name="shizuku_state_not_authorized">未許可</string>
+    <string name="shizuku_state_not_installed">未インストール</string>
+    <string name="shizuku_state_not_running">未起動</string>
+    <string name="shizuku_state_compat_required">Compat Hub の設定が必要です</string>
+</resources>

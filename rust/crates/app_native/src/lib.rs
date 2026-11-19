@@ -104,7 +104,7 @@ fn validate_shizuku_launch(
     guard_path: &Path,
     active_handles: usize,
 ) -> bool {
-    effective_uid == 2_000
+    (effective_uid == 0 || effective_uid == 2_000)
         && guard_path == native_library_directory.join("libdroidbridge_exec_guard.so")
         && active_handles < MAX_SHIZUKU_GUARD_HANDLES
 }
@@ -3518,11 +3518,12 @@ mod tests {
     }
 
     #[test]
-    fn i6_native_launcher_accepts_only_uid2000_installed_guard_and_free_slot() {
+    fn i6_native_launcher_accepts_root_or_shell_with_installed_guard_and_free_slot() {
         let directory = Path::new("/data/app/example/lib/arm64");
         let guard = directory.join("libdroidbridge_exec_guard.so");
+        assert!(validate_shizuku_launch(0, directory, &guard, 63));
         assert!(validate_shizuku_launch(2_000, directory, &guard, 63));
-        assert!(!validate_shizuku_launch(0, directory, &guard, 0));
+        assert!(!validate_shizuku_launch(1_000, directory, &guard, 0));
         assert!(!validate_shizuku_launch(
             2_000,
             directory,

@@ -9,6 +9,7 @@ mod automation_tool;
 mod command;
 mod context;
 mod core;
+pub mod dynamic_mcp;
 mod execution;
 pub mod fakes;
 mod filesystem;

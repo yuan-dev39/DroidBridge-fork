@@ -93,6 +93,8 @@ dependencies {
     implementation(libs.navigation3.runtime)
     implementation(libs.navigation3.ui)
     implementation(libs.lifecycle.viewmodel.navigation3)
+    implementation(libs.shizuku.api)
+    implementation(libs.shizuku.provider)
 
     debugImplementation(libs.compose.ui.tooling)
 
@@ -142,12 +144,13 @@ val helperJars = (33..37).associateWith { api ->
         destinationDirectory.set(classesJarDirectory)
     }
     val dexDirectory = layout.buildDirectory.dir("generated/magiskFramework/api$api/dex")
+    val d8Executable = if (System.getProperty("os.name").lowercase().contains("windows")) "d8.bat" else "d8"
     val dexHelper = tasks.register<Exec>("dexMagiskFrameworkApi$api") {
         dependsOn(jarHelper)
         inputs.file(classesJar)
         outputs.dir(dexDirectory)
         commandLine(
-            sdkPath.resolve("build-tools/36.0.0/d8.bat").absolutePath,
+            sdkPath.resolve("build-tools/36.0.0/$d8Executable").absolutePath,
             "--min-api", "33",
             "--output", dexDirectory.get().asFile.absolutePath,
             classesJar.get().asFile.absolutePath,

@@ -94,6 +94,36 @@ class DaemonConnection(
         return reply.toString().encodeToByteArray()
     }
 
+    suspend fun mcpServersList(): String = request("mcp_servers_list").toString()
+
+    suspend fun mcpLanSettings(): String = request("mcp_lan_settings").toString()
+
+    suspend fun setMcpLanEnabled(enabled: Boolean): String =
+        request("mcp_lan_set_enabled", buildJsonObject { put("enabled", enabled) }).toString()
+
+    suspend fun setMcpLanPort(port: Int): String =
+        request("mcp_lan_set_port", buildJsonObject { put("port", port) }).toString()
+
+    suspend fun rotateMcpLanToken(): String = request("mcp_lan_rotate_token").toString()
+
+    suspend fun revealMcpLanToken(): String = request("mcp_lan_reveal_token").toString()
+
+    suspend fun addMcpServer(id: String, displayName: String, endpoint: String, bearerToken: String?): String =
+        request("mcp_server_add", buildJsonObject {
+            put("id", id); put("display_name", displayName); put("endpoint", endpoint)
+            if (!bearerToken.isNullOrBlank()) put("bearer_token", bearerToken)
+            put("enabled", true)
+        }).toString()
+
+    suspend fun removeMcpServer(id: String): String =
+        request("mcp_server_remove", buildJsonObject { put("id", id) }).toString()
+
+    suspend fun setMcpServerEnabled(id: String, enabled: Boolean): String =
+        request("mcp_server_set_enabled", buildJsonObject { put("id", id); put("enabled", enabled) }).toString()
+
+    suspend fun refreshMcpServer(id: String): String =
+        request("mcp_server_refresh", buildJsonObject { put("id", id) }).toString()
+
     override suspend fun mcpSettings(): String = request("mcp_settings").toString()
 
     override suspend fun setMcpEnabled(enabled: Boolean): String =

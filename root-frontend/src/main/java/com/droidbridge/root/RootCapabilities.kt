@@ -11,19 +11,39 @@ import com.droidbridge.ui.client.RuntimeReadiness
 import com.droidbridge.ui.client.RuntimeSnapshot
 
 /**
- * The capability facts of the root edition. Root provides every capability, so a row appears
- * only for what is not available yet; the frontend itself grants nothing.
+ * The root edition reports its Magisk runtime and the independently probed Shizuku bridge.
+ * Shizuku availability is shown separately and never masquerades as a running Root daemon.
  */
 object RootCapabilities {
-    fun project(client: ClientState, daemon: DaemonStatus?, frontendVersionCode: Long): List<CapabilityRow> {
+    fun project(
+        client: ClientState,
+        daemon: DaemonStatus?,
+        frontendVersionCode: Long,
+        shizuku: CapabilityRow,
+    ): List<CapabilityRow> {
         val snapshot = (client as? ClientState.Available)?.snapshot
         return buildList {
             add(runtime(client, snapshot))
             add(backend(snapshot, daemon, frontendVersionCode))
+            add(shizuku)
             if (snapshot == null) return@buildList
-            val notifications = snapshot.grant("magisk.notifications")
-            if (notifications.state != AvailabilityState.Available) {
-                add(pending(CapabilityRowKey.NotificationAccess, notifications))
+            val localNetwork = snapshot.grant("android.local_network")
+            if (localNetwork.state != AvailabilityState.Available) {
+                add(pending(CapabilityRowKey.LocalNetwork, localNetwork, CapabilityAction.RequestLocalNetwork))
+            }
+            val notificationAccess = snapshot.grant("android.notification_listener")
+            if (notificationAccess.state != AvailabilityState.Available) {
+                add(pending(CapabilityRowKey.NotificationAccess, notificationAccess, CapabilityAction.OpenNotificationAccessSettings))
+            }
+            val accessibility = snapshot.grant("visual.accessibility")
+            if (accessibility.state != AvailabilityState.Available) {
+                add(pending(CapabilityRowKey.Accessibility, accessibility, CapabilityAction.OpenAccessibilitySettings))
+            }
+            val screenCapture = snapshot.grant("visual.media_projection_session")
+            if (screenCapture.state == AvailabilityState.Available) {
+                add(CapabilityRow(CapabilityRowKey.ScreenCapture, CapabilityRowState.Active, CapabilityAction.StopCapture))
+            } else {
+                add(pending(CapabilityRowKey.ScreenCapture, screenCapture, CapabilityAction.StartCapture))
             }
             val persistentTime = snapshot.capability("automation.persistent_time")
             if (persistentTime.state != AvailabilityState.Available) {
@@ -64,9 +84,9 @@ object RootCapabilities {
         }
     }
 
-    private fun pending(key: CapabilityRowKey, fact: AvailabilityFact): CapabilityRow = when (fact.state) {
-        AvailabilityState.Unknown -> CapabilityRow(key, CapabilityRowState.Unknown, CapabilityAction.Recheck, fact.reason)
-        else -> CapabilityRow(key, CapabilityRowState.Unavailable, CapabilityAction.Recheck, fact.reason)
+    private fun pending(key: CapabilityRowKey, fact: AvailabilityFact, action: CapabilityAction = CapabilityAction.Recheck): CapabilityRow = when (fact.state) {
+        AvailabilityState.Unknown -> CapabilityRow(key, CapabilityRowState.Unknown, action, fact.reason)
+        else -> CapabilityRow(key, CapabilityRowState.Unavailable, action, fact.reason)
     }
 
     private fun RuntimeSnapshot.grant(key: String): AvailabilityFact =

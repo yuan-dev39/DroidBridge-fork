@@ -921,6 +921,19 @@ private fun rememberCapabilityActionHandler(
                     context.startActivity(Intent(AndroidSettings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:${context.packageName}")))
                 }
             }
+            CapabilityAction.RequestLocalNetwork -> {
+                if (Build.VERSION.SDK_INT >= 37) localNetwork.launch(localNetworkPermission())
+                else viewModel.recheckRuntime()
+            }
+            CapabilityAction.OpenNotificationAccessSettings ->
+                DeviceSetup.openNotificationAccess(context, notificationListener)
+            CapabilityAction.OpenAccessibilitySettings -> {
+                if (DeviceSetup.restrictedSettingsApply(context)) {
+                    dialog = SetupDialog.RestrictedSettings
+                } else {
+                    DeviceSetup.openAccessibility(context)
+                }
+            }
             CapabilityAction.OpenSettings -> when {
                 row != CapabilityRowKey.Accessibility -> DeviceSetup.openNotificationAccess(context, notificationListener)
                 DeviceSetup.restrictedSettingsApply(context) -> dialog = SetupDialog.RestrictedSettings

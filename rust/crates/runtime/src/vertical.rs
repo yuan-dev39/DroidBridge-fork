@@ -463,20 +463,27 @@ impl crate::CapabilityPort for ApkCapabilityPort {
 /// is unknown until its adapter reports.
 fn initial_availability(host: RuntimeHost, key: &str) -> Availability {
     let root_grant = key.starts_with("magisk.") || key == "execution.root_guard";
-    if root_grant != (host == RuntimeHost::MagiskBackend) {
+    // The Magisk backend still runs alongside the Android frontend. Android user grants are
+    // therefore pending adapter reports, not capabilities that this host can never provide.
+    // Shizuku is the exception: this edition intentionally has no Shizuku provider.
+    let unavailable = (root_grant && host != RuntimeHost::MagiskBackend)
+        || (key == "shizuku.shell" && host == RuntimeHost::MagiskBackend);
+    if unavailable {
         Availability {
             state: CapabilityState::Unavailable,
             reason: Some("NOT_PROVIDED_BY_HOST".to_owned()),
         }
-    } else if key == "visual.media_projection_session" {
-        Availability {
-            state: CapabilityState::Unavailable,
-            reason: Some("USER_CONSENT_REQUIRED".to_owned()),
-        }
     } else {
         Availability {
             state: CapabilityState::Unknown,
-            reason: Some("ADAPTER_NOT_READY".to_owned()),
+            reason: Some(
+                if key == "visual.media_projection_session" {
+                    "USER_CONSENT_REQUIRED"
+                } else {
+                    "ADAPTER_NOT_READY"
+                }
+                .to_owned(),
+            ),
         }
     }
 }
@@ -501,6 +508,29 @@ mod tests {
             runtime_epoch: UuidV4::parse("123e4567-e89b-42d3-a456-426614174000").unwrap(),
             host_generation: 1,
         }
+    }
+
+    #[test]
+    fn root_backend_does_not_misreport_android_user_grants_as_unsupported() {
+        for key in [
+            "android.local_network",
+            "android.notification_listener",
+            "visual.accessibility",
+        ] {
+            let fact = initial_availability(RuntimeHost::MagiskBackend, key);
+            assert_eq!(fact.state, CapabilityState::Unknown, "{key}");
+            assert_eq!(fact.reason.as_deref(), Some("ADAPTER_NOT_READY"), "{key}");
+        }
+        let capture = initial_availability(
+            RuntimeHost::MagiskBackend,
+            "visual.media_projection_session",
+        );
+        assert_eq!(capture.state, CapabilityState::Unknown);
+        assert_eq!(capture.reason.as_deref(), Some("USER_CONSENT_REQUIRED"));
+
+        let shizuku = initial_availability(RuntimeHost::MagiskBackend, "shizuku.shell");
+        assert_eq!(shizuku.state, CapabilityState::Unavailable);
+        assert_eq!(shizuku.reason.as_deref(), Some("NOT_PROVIDED_BY_HOST"));
     }
 
     #[test]

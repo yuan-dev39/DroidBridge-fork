@@ -18,6 +18,7 @@ class RootApplication : Application() {
         super.onCreate()
         graph = AppGraph(this)
         graph.connection.start()
+        graph.shizuku.start()
     }
 }
 
@@ -28,6 +29,7 @@ class AppGraph(application: Application) {
         packageName = application.packageName,
         socketName = "droidbridge.${application.packageName}.u0.v1",
     )
+    val shizuku = ShizukuBackendController(application)
     val automations = AutomationRepository(submit = { envelope -> connection.submit(envelope) })
     val tasks = TaskRepository(submit = { envelope -> connection.submit(envelope) })
 

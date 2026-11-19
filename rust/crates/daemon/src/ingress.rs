@@ -3,9 +3,13 @@
 //! the settings only through the operations here, each of which commits before it applies and
 //! answers with the committed state.
 
-use crate::settings::{SettingsStore, TunnelSettings, valid_api_key, valid_tunnel_id};
+use crate::settings::{
+    McpLanSettings, SettingsStore, TunnelSettings, valid_api_key, valid_tunnel_id,
+};
+use runtime::dynamic_mcp::{DynamicMcpRegistry, McpServerConfig};
 use runtime::{McpFacade, McpHost, McpListener, TunnelClient, TunnelRuntime};
 use serde_json::{Value, json};
+use std::net::UdpSocket;
 
 const LISTENER_FAILED: &str = "MCP_LISTENER_FAILED";
 const RUNTIME_UNAVAILABLE: &str = "RUNTIME_UNAVAILABLE";
@@ -18,12 +22,21 @@ pub(crate) struct DaemonIngress<H> {
     host: Option<H>,
     listener: Option<(McpListener, String)>,
     listener_failed: bool,
+    lan_listener: Option<(McpListener, String, u16)>,
+    lan_listener_failed: bool,
     tunnel: Option<(TunnelRuntime, TunnelSettings)>,
     tunnel_failed: bool,
+    dynamic_registry: DynamicMcpRegistry,
 }
 
 impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
     pub(crate) fn new(settings: SettingsStore, port: u16) -> Self {
+        let dynamic_registry = DynamicMcpRegistry::new();
+        if let Ok(saved) = settings.mcp_servers() {
+            for config in saved {
+                let _ = dynamic_registry.upsert(config);
+            }
+        }
         Self {
             settings,
             port,
@@ -31,23 +44,40 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
             host: None,
             listener: None,
             listener_failed: false,
+            lan_listener: None,
+            lan_listener_failed: false,
             tunnel: None,
             tunnel_failed: false,
+            dynamic_registry,
         }
     }
 
     /// Serves [host], or nothing while it is none; both stop what served the previous host.
     pub(crate) fn attach(&mut self, host: Option<H>) {
         self.stop_listener();
+        self.stop_lan_listener();
         self.stop_tunnel();
         self.host = host;
         self.reconcile();
+        if self.host.is_some() {
+            if let Ok(configs) = self.dynamic_registry.configs() {
+                for config in configs.into_iter().filter(|config| config.enabled) {
+                    let _ = self.mcp_server_refresh(&config.id);
+                }
+            }
+        }
     }
 
     /// Brings the listener and the tunnel to the committed settings.
     pub(crate) fn reconcile(&mut self) {
         let mcp = self.settings.mcp().ok().filter(|settings| settings.enabled);
         self.reconcile_listener(mcp.map(|settings| settings.token));
+        let lan = self
+            .settings
+            .mcp_lan()
+            .ok()
+            .filter(|settings| settings.enabled);
+        self.reconcile_lan_listener(lan);
         let tunnel = self.settings.tunnel().ok().flatten();
         self.reconcile_tunnel(tunnel.filter(|settings| settings.enabled));
     }
@@ -93,6 +123,100 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
             Ok(settings) => json!({"schema_version": 1, "token": settings.token}),
             Err(_) => failure("IO_ERROR"),
         }
+    }
+
+    pub(crate) fn mcp_lan_settings(&mut self) -> Value {
+        match self.settings.mcp_lan() {
+            Ok(settings) => self.mcp_lan_status(settings),
+            Err(_) => failure("IO_ERROR"),
+        }
+    }
+
+    pub(crate) fn mcp_lan_set_enabled(&mut self, enabled: bool) -> Value {
+        let Ok(mut settings) = self.settings.mcp_lan() else {
+            return failure("IO_ERROR");
+        };
+        if settings.enabled != enabled {
+            settings.enabled = enabled;
+            if self.settings.commit_mcp_lan(&settings).is_err() {
+                return failure("IO_ERROR");
+            }
+        }
+        self.reconcile_lan_listener(enabled.then_some(settings.clone()));
+        self.mcp_lan_status(settings)
+    }
+
+    pub(crate) fn mcp_lan_set_port(&mut self, port: u16) -> Value {
+        if !(1024..=65535).contains(&port) {
+            return failure("INVALID_PORT");
+        }
+        let Ok(mut settings) = self.settings.mcp_lan() else {
+            return failure("IO_ERROR");
+        };
+        settings.port = port;
+        if self.settings.commit_mcp_lan(&settings).is_err() {
+            return failure("IO_ERROR");
+        }
+        self.reconcile_lan_listener(settings.enabled.then_some(settings.clone()));
+        self.mcp_lan_status(settings)
+    }
+
+    pub(crate) fn mcp_lan_rotate(&mut self) -> Value {
+        let Ok(mut settings) = self.settings.mcp_lan() else {
+            return failure("IO_ERROR");
+        };
+        let Ok(token) = crate::settings::new_token() else {
+            return failure("IO_ERROR");
+        };
+        settings.token = token;
+        if self.settings.commit_mcp_lan(&settings).is_err() {
+            return failure("IO_ERROR");
+        }
+        self.reconcile_lan_listener(settings.enabled.then_some(settings.clone()));
+        self.mcp_lan_status(settings)
+    }
+
+    pub(crate) fn mcp_lan_reveal(&self) -> Value {
+        match self.settings.mcp_lan() {
+            Ok(settings) => json!({"schema_version": 1, "token": settings.token}),
+            Err(_) => failure("IO_ERROR"),
+        }
+    }
+
+    fn mcp_lan_status(&self, settings: McpLanSettings) -> Value {
+        let running = self
+            .lan_listener
+            .as_ref()
+            .is_some_and(|(listener, _, port)| {
+                listener.state() == "running" && *port == settings.port
+            });
+        let reason = if !settings.enabled || running {
+            None
+        } else if self.host.is_none() {
+            Some(RUNTIME_UNAVAILABLE)
+        } else if self.lan_listener_failed || self.lan_listener.is_some() {
+            Some("LAN_LISTENER_FAILED")
+        } else {
+            None
+        };
+        let address = local_lan_ip();
+        let endpoint = address
+            .as_ref()
+            .map(|ip| format!("http://{ip}:{}/mcp", settings.port));
+        let mut status = json!({
+            "schema_version": 1,
+            "enabled": settings.enabled,
+            "listener": if reason.is_some() { "failed" } else if running { "running" } else { "stopped" },
+            "bind_address": "0.0.0.0",
+            "port": settings.port,
+            "endpoint": endpoint,
+            "token_configured": true,
+            "protocol_version": runtime::MCP_PROTOCOL_VERSION,
+        });
+        if let Some(reason) = reason {
+            status["reason"] = Value::from(reason);
+        }
+        status
     }
 
     pub(crate) fn tunnel_settings(&mut self) -> Value {
@@ -243,6 +367,104 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
         status
     }
 
+    pub(crate) fn mcp_servers_list(&self) -> Value {
+        match self.dynamic_registry.list_servers() {
+            Ok(servers) => json!({"schema_version":1,"servers":servers}),
+            Err(_) => failure("REGISTRY_UNAVAILABLE"),
+        }
+    }
+
+    pub(crate) fn mcp_server_add(&mut self, payload: &Value) -> Value {
+        let (Some(id), Some(display_name), Some(endpoint)) = (
+            payload.get("id").and_then(Value::as_str),
+            payload.get("display_name").and_then(Value::as_str),
+            payload.get("endpoint").and_then(Value::as_str),
+        ) else {
+            return failure("INVALID_CONFIG");
+        };
+        let bearer_token = match payload.get("bearer_token") {
+            None | Some(Value::Null) => None,
+            Some(Value::String(value)) => Some(value.clone()),
+            _ => return failure("INVALID_CONFIG"),
+        };
+        let config = McpServerConfig {
+            id: id.to_owned(),
+            display_name: display_name.to_owned(),
+            endpoint: endpoint.to_owned(),
+            enabled: payload
+                .get("enabled")
+                .and_then(Value::as_bool)
+                .unwrap_or(true),
+            bearer_token,
+        };
+        if DynamicMcpRegistry::validate_config(&config).is_err() {
+            return failure("INVALID_CONFIG");
+        }
+        let mut configs = match self.dynamic_registry.configs() {
+            Ok(value) => value,
+            Err(_) => return failure("REGISTRY_UNAVAILABLE"),
+        };
+        configs.retain(|current| current.id != config.id);
+        configs.push(config.clone());
+        if self.settings.commit_mcp_servers(&configs).is_err() {
+            return failure("IO_ERROR");
+        }
+        if self.dynamic_registry.upsert(config).is_err() {
+            return failure("INVALID_CONFIG");
+        }
+        self.mcp_server_refresh(id)
+    }
+
+    pub(crate) fn mcp_server_remove(&mut self, id: &str) -> Value {
+        let mut configs = match self.dynamic_registry.configs() {
+            Ok(value) => value,
+            Err(_) => return failure("REGISTRY_UNAVAILABLE"),
+        };
+        configs.retain(|config| config.id != id);
+        if self.settings.commit_mcp_servers(&configs).is_err() {
+            return failure("IO_ERROR");
+        }
+        match self.dynamic_registry.remove(id) {
+            Ok(()) => self.mcp_servers_list(),
+            Err(_) => failure("REGISTRY_UNAVAILABLE"),
+        }
+    }
+
+    pub(crate) fn mcp_server_set_enabled(&mut self, id: &str, enabled: bool) -> Value {
+        let mut configs = match self.dynamic_registry.configs() {
+            Ok(value) => value,
+            Err(_) => return failure("REGISTRY_UNAVAILABLE"),
+        };
+        let Some(config) = configs.iter_mut().find(|config| config.id == id) else {
+            return failure("UNKNOWN_SERVER");
+        };
+        config.enabled = enabled;
+        if self.settings.commit_mcp_servers(&configs).is_err() {
+            return failure("IO_ERROR");
+        }
+        match self.dynamic_registry.set_enabled(id, enabled) {
+            Ok(()) => self.mcp_servers_list(),
+            Err(_) => failure("UNKNOWN_SERVER"),
+        }
+    }
+
+    pub(crate) fn mcp_server_refresh(&mut self, id: &str) -> Value {
+        let registry = self.dynamic_registry.clone();
+        let result = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|_| ())
+            .and_then(|runtime| runtime.block_on(registry.refresh(id)).map_err(|_| ()));
+        match result {
+            Ok(count) => {
+                json!({"schema_version":1,"refreshed":true,"tool_count":count,"servers":self.mcp_servers_list()["servers"]})
+            }
+            Err(()) => {
+                json!({"schema_version":1,"refreshed":false,"error":"UPSTREAM_UNAVAILABLE","servers":self.mcp_servers_list()["servers"]})
+            }
+        }
+    }
+
     fn reconcile_listener(&mut self, token: Option<String>) {
         let (Some(token), Some(host)) = (token, self.host.clone()) else {
             self.stop_listener();
@@ -263,14 +485,52 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
             }
             self.stop_listener();
         }
-        let started = McpFacade::new(host, self.product_version.clone())
-            .and_then(|facade| McpListener::start(self.port, token.clone(), facade));
+        let started = McpFacade::new_with_registry(
+            host,
+            self.product_version.clone(),
+            self.dynamic_registry.clone(),
+        )
+        .and_then(|facade| McpListener::start(self.port, token.clone(), facade));
         match started {
             Ok(listener) => {
                 self.listener = Some((listener, token));
                 self.listener_failed = false;
             }
             Err(_) => self.listener_failed = true,
+        }
+    }
+
+    fn reconcile_lan_listener(&mut self, settings: Option<McpLanSettings>) {
+        let (Some(settings), Some(host)) = (settings, self.host.clone()) else {
+            self.stop_lan_listener();
+            return;
+        };
+        if let Some((listener, current_token, current_port)) = &mut self.lan_listener {
+            if listener.state() == "running" && *current_port == settings.port {
+                if *current_token != settings.token {
+                    if listener.set_token(settings.token.clone()).is_ok() {
+                        *current_token = settings.token;
+                    } else {
+                        self.stop_lan_listener();
+                        self.lan_listener_failed = true;
+                    }
+                }
+                return;
+            }
+            self.stop_lan_listener();
+        }
+        let started = McpFacade::new_with_registry(
+            host,
+            self.product_version.clone(),
+            self.dynamic_registry.clone(),
+        )
+        .and_then(|facade| McpListener::start_lan(settings.port, settings.token.clone(), facade));
+        match started {
+            Ok(listener) => {
+                self.lan_listener = Some((listener, settings.token, settings.port));
+                self.lan_listener_failed = false;
+            }
+            Err(_) => self.lan_listener_failed = true,
         }
     }
 
@@ -287,18 +547,22 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
             return;
         }
         self.stop_tunnel();
-        let started = McpFacade::new(host, self.product_version.clone())
+        let started = McpFacade::new_with_registry(
+            host,
+            self.product_version.clone(),
+            self.dynamic_registry.clone(),
+        )
+        .map_err(|_| ())
+        .and_then(|facade| {
+            TunnelClient::new(
+                facade,
+                &settings.tunnel_id,
+                &settings.api_key,
+                &self.product_version,
+            )
             .map_err(|_| ())
-            .and_then(|facade| {
-                TunnelClient::new(
-                    facade,
-                    &settings.tunnel_id,
-                    &settings.api_key,
-                    &self.product_version,
-                )
-                .map_err(|_| ())
-            })
-            .and_then(|client| TunnelRuntime::start(client).map_err(|_| ()));
+        })
+        .and_then(|client| TunnelRuntime::start(client).map_err(|_| ()));
         match started {
             Ok(tunnel) => self.tunnel = Some((tunnel, settings)),
             Err(()) => self.tunnel_failed = true,
@@ -310,6 +574,13 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
             listener.stop();
         }
         self.listener_failed = false;
+    }
+
+    fn stop_lan_listener(&mut self) {
+        if let Some((listener, _, _)) = self.lan_listener.take() {
+            listener.stop();
+        }
+        self.lan_listener_failed = false;
     }
 
     fn stop_tunnel(&mut self) {
@@ -325,9 +596,22 @@ impl<H> Drop for DaemonIngress<H> {
         if let Some((listener, _)) = self.listener.take() {
             listener.stop();
         }
+        if let Some((listener, _, _)) = self.lan_listener.take() {
+            listener.stop();
+        }
         if let Some((tunnel, _)) = self.tunnel.take() {
             tunnel.stop();
         }
+    }
+}
+
+fn local_lan_ip() -> Option<String> {
+    let socket = UdpSocket::bind(("0.0.0.0", 0)).ok()?;
+    socket.connect(("192.0.2.1", 9)).ok()?;
+    let address = socket.local_addr().ok()?.ip();
+    match address {
+        std::net::IpAddr::V4(ip) if ip.is_private() || ip.is_link_local() => Some(ip.to_string()),
+        _ => None,
     }
 }
 

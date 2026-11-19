@@ -1,4 +1,4 @@
-//! The loopback MCP listener (S-MCP-001, S-STACK-011). Pinned Hyper frames HTTP/1.1 and the shared
+//! Authenticated loopback and private-LAN MCP listeners (S-MCP-001, S-STACK-011). Pinned Hyper frames HTTP/1.1 and the shared
 //! facade owns every protocol decision; the host it is built with is the authoritative Runtime.
 
 use crate::{MCP_BODY_LIMIT_BYTES, McpFacade, McpHost, McpRequest};
@@ -47,10 +47,39 @@ impl McpListener {
         Self::serve(listener, token, facade)
     }
 
+    /// Binds all IPv4 interfaces for an explicitly enabled, token-authenticated LAN endpoint.
+    /// The accept loop independently rejects peers outside private/loopback/link-local ranges.
+    pub fn start_lan<H: McpHost + 'static>(
+        port: u16,
+        token: String,
+        facade: McpFacade<H>,
+    ) -> Result<Self, DomainError> {
+        let listener = StdTcpListener::bind(SocketAddr::from((Ipv4Addr::UNSPECIFIED, port)))
+            .map_err(|_| listener_failed())?;
+        Self::serve_lan(listener, token, facade)
+    }
+
     pub fn serve<H: McpHost + 'static>(
         listener: StdTcpListener,
         token: String,
         facade: McpFacade<H>,
+    ) -> Result<Self, DomainError> {
+        Self::serve_with_policy(listener, token, facade, false)
+    }
+
+    pub fn serve_lan<H: McpHost + 'static>(
+        listener: StdTcpListener,
+        token: String,
+        facade: McpFacade<H>,
+    ) -> Result<Self, DomainError> {
+        Self::serve_with_policy(listener, token, facade, true)
+    }
+
+    fn serve_with_policy<H: McpHost + 'static>(
+        listener: StdTcpListener,
+        token: String,
+        facade: McpFacade<H>,
+        lan_only: bool,
     ) -> Result<Self, DomainError> {
         listener
             .set_nonblocking(true)
@@ -66,7 +95,12 @@ impl McpListener {
             tokio::net::TcpListener::from_std(listener).map_err(|_| listener_failed())?
         };
         let token = Arc::new(RwLock::new(token));
-        runtime.spawn(accept_loop(listener, Arc::new(facade), Arc::clone(&token)));
+        runtime.spawn(accept_loop(
+            listener,
+            Arc::new(facade),
+            Arc::clone(&token),
+            lan_only,
+        ));
         Ok(Self { runtime, token })
     }
 
@@ -91,6 +125,7 @@ async fn accept_loop<H: McpHost + 'static>(
     listener: tokio::net::TcpListener,
     facade: Arc<McpFacade<H>>,
     token: Arc<RwLock<String>>,
+    lan_only: bool,
 ) {
     let connections = Arc::new(Semaphore::new(MAX_CONNECTIONS));
     loop {
@@ -99,7 +134,11 @@ async fn accept_loop<H: McpHost + 'static>(
             return;
         };
         match listener.accept().await {
-            Ok((stream, _)) => {
+            Ok((stream, peer)) => {
+                if lan_only && !is_private_lan_peer(peer.ip()) {
+                    drop(permit);
+                    continue;
+                }
                 let facade = Arc::clone(&facade);
                 let token = Arc::clone(&token);
                 tokio::spawn(async move {
@@ -117,6 +156,25 @@ async fn accept_loop<H: McpHost + 'static>(
                 });
             }
             Err(_) => tokio::time::sleep(ACCEPT_RETRY_DELAY).await,
+        }
+    }
+}
+
+/// LAN exposure is deliberately limited to local/private networks. Public peers are dropped
+/// before HTTP parsing, while the normal bearer-token check remains mandatory for accepted peers.
+fn is_private_lan_peer(address: std::net::IpAddr) -> bool {
+    match address {
+        std::net::IpAddr::V4(ip) => {
+            ip.is_loopback() || ip.is_private() || ip.is_link_local() || ip.is_unspecified()
+        }
+        std::net::IpAddr::V6(ip) => {
+            ip.is_loopback()
+                || ip.is_unique_local()
+                || ip.is_unicast_link_local()
+                || ip.is_unspecified()
+                || ip
+                    .to_ipv4_mapped()
+                    .is_some_and(|v4| v4.is_loopback() || v4.is_private() || v4.is_link_local())
         }
     }
 }
@@ -206,6 +264,38 @@ mod tests {
 
     const TOKEN: &str = "tXw1sO3n6b2WqQm9J0gKf8yVhZcR4dLpA7eNuTiYkMs";
     const ROTATED: &str = "Q2Vk5Yv0nLm8sX1rT4aZ7uB3cW6eH9jK2pF5gD8iM0o";
+
+    #[test]
+    fn lan_listener_accepts_private_peers_and_rejects_public_peers() {
+        use std::net::IpAddr;
+
+        for address in [
+            "127.0.0.1",
+            "10.0.0.8",
+            "172.16.4.2",
+            "192.168.1.20",
+            "169.254.1.2",
+            "fc00::1",
+            "fe80::1",
+        ] {
+            assert!(
+                is_private_lan_peer(address.parse::<IpAddr>().unwrap()),
+                "{address}"
+            );
+        }
+        for address in [
+            "8.8.8.8",
+            "1.1.1.1",
+            "172.15.255.1",
+            "192.0.2.10",
+            "2001:4860:4860::8888",
+        ] {
+            assert!(
+                !is_private_lan_peer(address.parse::<IpAddr>().unwrap()),
+                "{address}"
+            );
+        }
+    }
 
     struct CannedHost;
 
