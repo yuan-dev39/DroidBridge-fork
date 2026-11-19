@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mcp_servers_manage">MCPサーバーを管理</string>
+    <string name="mcp_servers_title">MCPサーバー</string>
+    <string name="mcp_servers_shared_description">変更はローカルMCPエンドポイントと既存のOpenAIセキュアトンネルの両方に反映されます。</string>
+    <string name="mcp_servers_service_id">サービスID（例：mt-manager）</string>
+    <string name="mcp_servers_display_name">表示名</string>
+    <string name="mcp_servers_endpoint_label">MCPエンドポイントURL</string>
+    <string name="mcp_servers_safety_note">安全制限：HTTPと、ループバックまたはプライベートLANのIPアドレスのみ使用できます。パブリックホスト、ドメイン名、HTTPSは拒否されます。Bearer TokenはループバックURLでのみ使用できます。</string>
+    <string name="mcp_servers_bearer_token">Bearer Token（任意・入力専用、再表示されません）</string>
+    <string name="mcp_servers_add">サーバーを追加</string>
+    <string name="mcp_servers_refresh_list">一覧を更新</string>
+    <string name="mcp_servers_registry_updated">一覧を更新しました</string>
+    <string name="mcp_servers_daemon_unavailable">DroidBridgeデーモンに接続できません</string>
+    <string name="mcp_servers_add_failed">追加に失敗しました</string>
+    <string name="mcp_servers_added">サーバーを追加し、ツール検出を試行しました</string>
+    <string name="mcp_servers_tools_count">ツール数：%1$s</string>
+    <string name="mcp_servers_enabled">有効</string>
+    <string name="mcp_servers_disabled">無効</string>
+    <string name="mcp_servers_connection_error">接続状態：%1$s</string>
+    <string name="mcp_servers_state_updated">サーバー状態を更新しました</string>
+    <string name="mcp_servers_update_failed">更新に失敗しました</string>
+    <string name="mcp_servers_discovery_finished">ツール検出が完了しました</string>
+    <string name="mcp_servers_connection_test_failed">接続テストに失敗しました</string>
+    <string name="mcp_servers_refresh_failed">更新に失敗しました</string>
+    <string name="mcp_servers_test_refresh">接続テスト / 更新</string>
+    <string name="mcp_servers_removed">サーバーを削除しました</string>
+    <string name="mcp_servers_remove_failed">削除に失敗しました</string>
+    <string name="mcp_servers_remove">削除</string>
+</resources>
