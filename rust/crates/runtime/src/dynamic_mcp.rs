@@ -131,7 +131,7 @@ impl DynamicMcpRegistry {
             entries.get(id).and_then(|e| e.config.clone()).ok_or(RegistryError::Invalid("unknown server"))?
         };
         if !config.enabled { return Err(RegistryError::Invalid("server is disabled")); }
-        let tools = discover(&config).await?;
+        let (tools, protocol_version, session_id) = discover(&config).await?;
         let mut names = std::collections::BTreeSet::new();
         for tool in &tools {
             let name = tool.get("name").and_then(Value::as_str).ok_or(RegistryError::Upstream("tool has no name"))?;
@@ -148,6 +148,8 @@ impl DynamicMcpRegistry {
             definition["name"] = json!(format!("{}__{}", id, upstream_name));
             PublishedTool { server_id: id.to_owned(), upstream_name, definition: definition.clone(), published_name: definition["name"].as_str().unwrap_or_default().to_owned() }
         }).collect();
+        entry.protocol_version = Some(protocol_version);
+        entry.session_id = session_id;
         entry.last_error = None;
         Ok(entry.tools.len())
     }
@@ -162,48 +164,66 @@ impl DynamicMcpRegistry {
             (entry.config.clone().ok_or(RegistryError::Unavailable)?, tool.upstream_name.clone(), entry.session_id.clone())
         };
         let response = send_rpc(&config, session.as_deref(), "tools/call", json!({"name":upstream_name,"arguments":arguments})).await?;
-        if response.get("error").is_some() { return Err(RegistryError::Upstream("upstream tool call failed")); }
-        response.get("result").cloned().ok_or(RegistryError::Upstream("missing tool result"))
+        if response.value.get("error").is_some() { return Err(RegistryError::Upstream("upstream tool call failed")); }
+        response.value.get("result").cloned().ok_or(RegistryError::Upstream("missing tool result"))
     }
 }
 fn valid_id(v: &str) -> bool { !v.is_empty() && v.len() <= 32 && v.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_') }
 fn valid_tool_name(v: &str) -> bool { !v.is_empty() && v.len() <= 128 && v.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-' || b == b'.') }
 
-async fn discover(config: &McpServerConfig) -> Result<Vec<Value>, RegistryError> {
+#[derive(Debug)]
+struct RpcReply {
+    value: Value,
+    session_id: Option<String>,
+}
+
+async fn discover(config: &McpServerConfig) -> Result<(Vec<Value>, String, Option<String>), RegistryError> {
     let init = send_rpc(config, None, "initialize", json!({
         "protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"DroidBridge","version":env!("CARGO_PKG_VERSION")}
     })).await?;
-    let version = init.pointer("/result/protocolVersion").and_then(Value::as_str).ok_or(RegistryError::Upstream("initialize did not negotiate a protocol version"))?;
-    let session = init.get("_sessionId").and_then(Value::as_str).map(str::to_owned);
+    let version = init.value.pointer("/result/protocolVersion").and_then(Value::as_str)
+        .ok_or(RegistryError::Upstream("initialize did not negotiate a protocol version"))?.to_owned();
+    let session = init.session_id.clone();
     let _ = send_rpc(config, session.as_deref(), "notifications/initialized", json!({})).await;
     let listed = send_rpc(config, session.as_deref(), "tools/list", json!({})).await?;
-    let tools = listed.pointer("/result/tools").and_then(Value::as_array).ok_or(RegistryError::Upstream("tools/list response is invalid"))?;
+    let tools = listed.value.pointer("/result/tools").and_then(Value::as_array)
+        .ok_or(RegistryError::Upstream("tools/list response is invalid"))?;
     if tools.len() > MAX_TOOLS_PER_SERVER { return Err(RegistryError::Invalid("tool limit reached")); }
-    // Protocol/session details are cached only after successful discovery.
-    let _ = (version, session);
-    Ok(tools.clone())
+    Ok((tools.clone(), version, session))
 }
-async fn send_rpc(config: &McpServerConfig, session: Option<&str>, method: &str, params: Value) -> Result<Value, RegistryError> {
+
+async fn send_rpc(config: &McpServerConfig, session: Option<&str>, method: &str, params: Value) -> Result<RpcReply, RegistryError> {
     let url = DynamicMcpRegistry::validate_config(config)?;
-    let mut builder = Client::builder().redirect(reqwest::redirect::Policy::none()).connect_timeout(Duration::from_secs(4)).timeout(REQUEST_TIMEOUT);
-    let client = builder.build().map_err(|_| RegistryError::Unavailable)?;
-    let mut request = client.post(url).header(CONTENT_TYPE, "application/json").header(ACCEPT, "application/json, text/event-stream");
+    let client = Client::builder().redirect(reqwest::redirect::Policy::none())
+        .connect_timeout(Duration::from_secs(4)).timeout(REQUEST_TIMEOUT)
+        .build().map_err(|_| RegistryError::Unavailable)?;
+    let mut request = client.post(url).header(CONTENT_TYPE, "application/json")
+        .header(ACCEPT, "application/json, text/event-stream");
     if let Some(token) = &config.bearer_token {
-        let mut value = HeaderValue::from_str(&format!("Bearer {token}")).map_err(|_| RegistryError::Invalid("invalid credential header"))?;
+        let mut value = HeaderValue::from_str(&format!("Bearer {token}"))
+            .map_err(|_| RegistryError::Invalid("invalid credential header"))?;
         value.set_sensitive(true);
         request = request.header(AUTHORIZATION, value);
     }
     if let Some(session) = session { request = request.header("Mcp-Session-Id", session); }
-    let id = 1_u64;
-    let body = if method.starts_with("notifications/") { json!({"jsonrpc":"2.0","method":method,"params":params}) }
-        else { json!({"jsonrpc":"2.0","id":id,"method":method,"params":params}) };
-    let response = timeout(REQUEST_TIMEOUT, request.json(&body).send()).await.map_err(|_| RegistryError::Unavailable)?.map_err(|_| RegistryError::Unavailable)?;
+    let body = if method.starts_with("notifications/") {
+        json!({"jsonrpc":"2.0","method":method,"params":params})
+    } else {
+        json!({"jsonrpc":"2.0","id":1_u64,"method":method,"params":params})
+    };
+    let response = timeout(REQUEST_TIMEOUT, request.json(&body).send()).await
+        .map_err(|_| RegistryError::Unavailable)?.map_err(|_| RegistryError::Unavailable)?;
     if !response.status().is_success() { return Err(RegistryError::Upstream("upstream returned a non-success status")); }
-    if method.starts_with("notifications/") { return Ok(json!({})); }
+    let session_id = response.headers().get("Mcp-Session-Id")
+        .and_then(|value| value.to_str().ok()).map(str::to_owned);
+    if method.starts_with("notifications/") {
+        return Ok(RpcReply { value: json!({}), session_id });
+    }
     let bytes = response.bytes().await.map_err(|_| RegistryError::Unavailable)?;
     if bytes.len() > MAX_RESPONSE_BYTES { return Err(RegistryError::Invalid("upstream response too large")); }
-    let value: Value = serde_json::from_slice(&bytes).map_err(|_| RegistryError::Upstream("upstream returned invalid JSON"))?;
-    Ok(value)
+    let value: Value = serde_json::from_slice(&bytes)
+        .map_err(|_| RegistryError::Upstream("upstream returned invalid JSON"))?;
+    Ok(RpcReply { value, session_id })
 }
 
 #[cfg(test)]
