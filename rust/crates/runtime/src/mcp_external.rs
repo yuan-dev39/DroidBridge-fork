@@ -493,6 +493,38 @@ mod tests {
     }
 
     #[test]
+    fn replacing_registry_preserves_unchanged_server_sessions() {
+        let config = ServerConfig {
+            name: "mt".to_owned(),
+            endpoint: "http://127.0.0.1:8787/mcp".to_owned(),
+            bearer_token: Some("secret".to_owned()),
+        };
+        let previous = build_servers(vec![config.clone()], Vec::new());
+        let original = Arc::clone(&previous[0]);
+        let next = build_servers(vec![config], previous);
+        assert!(Arc::ptr_eq(&original, &next[0]));
+    }
+
+    #[test]
+    fn replacing_registry_removes_services_not_in_the_new_snapshot() {
+        let registry = ExternalMcpRegistry::from_environment();
+        registry.replace_json("[]").unwrap();
+        assert!(registry.servers.read().unwrap().is_empty());
+    }
+
+    #[test]
+    fn replacement_rejects_duplicate_names_and_unsafe_endpoints() {
+        let registry = ExternalMcpRegistry::from_environment();
+        let duplicate = r#"[
+            {"name":"mt","endpoint":"http://127.0.0.1:8787/mcp"},
+            {"name":"mt","endpoint":"http://127.0.0.1:8788/mcp"}
+        ]"#;
+        assert_eq!(registry.replace_json(duplicate), Err("DUPLICATE_SERVICE_NAME"));
+        let public_http = r#"[{"name":"public","endpoint":"http://example.com/mcp"}]"#;
+        assert_eq!(registry.replace_json(public_http), Err("INVALID_CONFIG"));
+    }
+
+    #[test]
     fn only_namespaced_tools_are_routed_to_external_servers() {
         assert!(is_external_tool("mt__shell"));
         assert!(is_external_tool("files__read"));
