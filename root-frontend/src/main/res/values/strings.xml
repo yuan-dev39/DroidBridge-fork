@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name" translatable="false">DroidBridge Root</string>
+    <string name="accessibility_service_description">DroidBridge optional accessibility integration</string>
 </resources>
