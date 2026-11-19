@@ -59,7 +59,7 @@ jobs:
             "platforms;android-35" \
             "platforms;android-36" \
             "build-tools;36.0.0" \
-            "ndk;29.0.14206865" \\
+            "ndk;29.0.14206865" \
             "cmake;3.31.6"
           sdkmanager --install "platforms;android-37.0"
           # SDK Manager publishes API 37 under android-37.0, while this project's
