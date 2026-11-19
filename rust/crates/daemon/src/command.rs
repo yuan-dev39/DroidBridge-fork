@@ -608,6 +608,12 @@ impl RootCommandGuard {
         claim: &LocalExecutionClaim,
         stdout_file: Option<fs::File>,
     ) -> Result<CommandProcessSettlement, ExecutionFailure> {
+        if unsafe { libc::geteuid() } != 0 {
+            return Err(pre_start(DomainError::new(
+                ErrorCode::PermissionDenied,
+                "Magisk command daemon is not UID 0",
+            )));
+        }
         if !self.guard_path.is_absolute() || !self.guard_path.is_file() {
             return Err(pre_start(DomainError::new(
                 ErrorCode::CapabilityUnavailable,
@@ -748,12 +754,6 @@ impl RootCommandGuard {
         let exit_code = (cause == CommandProcessCause::Exited)
             .then(|| settlement.shell_exit_code.or(reaped.exit_code))
             .flatten();
-        if unsafe { libc::geteuid() } != 0 {
-            return Err(ExecutionFailure {
-                error: DomainError::new(ErrorCode::PermissionDenied, "Magisk command daemon is not UID 0"),
-                cleanup_verified: settlement.cleanup_verified,
-            });
-        }
         Ok(CommandProcessSettlement {
             outcome: CommandProcessOutcome {
                 cause,
