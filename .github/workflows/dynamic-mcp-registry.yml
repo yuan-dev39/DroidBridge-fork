@@ -36,7 +36,7 @@ jobs:
         run: cargo test --workspace --locked
 
   android:
-    name: Build Android debug Magisk module
+    name: Build Root module and Shizuku APK editions
     runs-on: ubuntu-latest
     needs: rust
     steps:
@@ -73,14 +73,32 @@ jobs:
         run: bash tools/build-libpcap.sh
       - uses: dtolnay/rust-toolchain@1.98.0
         with:
-          targets: aarch64-linux-android
+          targets: aarch64-linux-android,x86_64-linux-android
       - name: Install cargo-ndk
         run: cargo install cargo-ndk --locked
-      - name: Build debug root module and frontend APK
-        run: bash ./gradlew :root-frontend:assembleDebugMagiskModule --no-daemon
+      - name: Build Root edition artifacts
+        run: |
+          bash ./gradlew \
+            :root-frontend:assembleDebugMagiskModule \
+            :root-frontend:assembleStableMagiskModule \
+            --no-daemon
+      - name: Build standalone Shizuku APK
+        run: bash ./gradlew :standalone:packageShizukuDebugApk --no-daemon
       - uses: actions/upload-artifact@v4
         with:
-          name: droidbridge-debug-magisk-module
+          name: droidbridge-root-debug-module
           path: root-frontend/build/outputs/magisk/droidbridge-debug-magisk.zip
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: droidbridge-root-stable-module
+          path: root-frontend/build/outputs/magisk/droidbridge-stable-magisk.zip
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: droidbridge-shizuku-debug-apk
+          path: standalone/build/outputs/distributions/DroidBridge-Shizuku-debug.apk
           if-no-files-found: error
           retention-days: 14
