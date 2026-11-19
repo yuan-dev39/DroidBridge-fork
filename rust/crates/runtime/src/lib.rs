@@ -14,6 +14,7 @@ pub mod fakes;
 mod filesystem;
 mod ingress;
 mod mcp;
+pub mod dynamic_mcp;
 mod mcp_listener;
 mod network;
 mod ports;
