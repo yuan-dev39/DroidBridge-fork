@@ -416,12 +416,12 @@ mod tests {
                         }));
                     }
                     (1, "notifications/initialized") => {
-                        assert!(headers.contains("Mcp-Session-Id: session-test"));
+                        assert!(headers.to_ascii_lowercase().contains("mcp-session-id: session-test"));
                         stream.write_all(b"HTTP/1.1 202 Accepted\\r\\nContent-Length: 0\\r\\nConnection: close\\r\\n\\r\\n").unwrap();
                     }
                     (2, "tools/list") => {
                         assert!(headers.contains("Mcp-Session-Id: session-test"));
-                        assert!(headers.contains("MCP-Protocol-Version: 2025-03-26"));
+                        assert!(headers.to_ascii_lowercase().contains("mcp-protocol-version: 2025-03-26"));
                         write_mock_response(&mut stream, "200 OK", "Mcp-Session-Id: session-test\\r\\n", &json!({
                             "jsonrpc":"2.0","id":request["id"],"result":{"tools":[{
                                 "name":"echo","description":"Echo input",
