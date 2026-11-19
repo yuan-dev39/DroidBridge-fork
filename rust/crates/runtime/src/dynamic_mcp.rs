@@ -83,6 +83,11 @@ impl DynamicMcpRegistry {
         entries.insert(config.id.clone(), ServerEntry { config: Some(config), ..old });
         Ok(())
     }
+    pub fn configs(&self) -> Result<Vec<McpServerConfig>, RegistryError> {
+        let entries = self.servers.read().map_err(|_| RegistryError::Unavailable)?;
+        Ok(entries.values().filter_map(|entry| entry.config.clone()).collect())
+    }
+
     pub fn list_servers(&self) -> Result<Vec<Value>, RegistryError> {
         let entries = self.servers.read().map_err(|_| RegistryError::Unavailable)?;
         Ok(entries.iter().map(|(id, entry)| json!({
