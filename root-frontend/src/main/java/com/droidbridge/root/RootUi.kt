@@ -108,6 +108,7 @@ import kotlinx.serialization.Serializable
 @Serializable data object AgentConnections : NavKey
 @Serializable data object MCP : NavKey
 @Serializable data object TunnelSetup : NavKey
+@Serializable data object MCPServers : NavKey
 @Serializable data object Diagnostics : NavKey
 @Serializable data object Settings : NavKey
 @Serializable data object Data : NavKey
@@ -325,7 +326,11 @@ private fun NavigationRoot(state: RootUiState, viewModel: RootViewModel, graph: 
                     viewModel = viewModel { McpViewModel(graph.connection) },
                     openMcp = { backStack.add(MCP) },
                     openTunnel = { backStack.add(TunnelSetup) },
+                    openServers = { backStack.add(MCPServers) },
                 ) { backStack.removeLastOrNull() }
+            }
+            entry<MCPServers> {
+                McpServersRoute(graph.connection) { backStack.removeLastOrNull() }
             }
             // The daemon serves MCP and the tunnel itself, so the frontend needs no notification
             // permission to keep them alive.
