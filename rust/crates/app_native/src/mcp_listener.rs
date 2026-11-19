@@ -9,7 +9,8 @@ use jni::{
     sys::{JNI_FALSE, JNI_TRUE, jboolean, jint, jstring},
 };
 use runtime::{
-    ExternalMcpRegistry, MCP_DEBUG_PORT, MCP_STABLE_PORT, McpArtifactReply, McpFacade, McpHost, McpListener, PortFuture,
+    ExternalMcpRegistry, MCP_DEBUG_PORT, MCP_STABLE_PORT, McpArtifactReply, McpFacade, McpHost,
+    McpListener, PortFuture,
 };
 use serde_json::Value;
 use std::{
