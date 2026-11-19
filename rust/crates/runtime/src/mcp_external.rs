@@ -96,9 +96,14 @@ impl ExternalMcpRegistry {
             }
             if !seen.insert(config.name.clone()) { return Err("DUPLICATE_SERVICE_NAME"); }
         }
+        let expected_active = configs.iter().filter(|config| config.enabled).count();
         let mut active = self.servers.write().map_err(|_| "RUNTIME_UNAVAILABLE")?;
-        let previous = active.clone();
-        *active = build_servers(configs, previous);
+        let replacement = build_servers(configs, active.clone());
+        // A TLS/client construction failure must not partially replace the last known-good set.
+        if replacement.len() != expected_active {
+            return Err("RUNTIME_UNAVAILABLE");
+        }
+        *active = replacement;
         Ok(())
     }
 
