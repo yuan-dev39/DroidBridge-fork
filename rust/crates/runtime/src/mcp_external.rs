@@ -16,7 +16,8 @@ const DEFAULT_ENDPOINT: &str = "http://127.0.0.1:8787/mcp";
 const CACHE_TTL: Duration = Duration::from_secs(15);
 const MAX_RESPONSE_BYTES: usize = 2 * 1024 * 1024;
 const MAX_SERVERS: usize = 16;
-const MAX_TOOLS_PER_SERVER: usize = 256;
+const MAX_TOOLS_PER_SERVER: usize = 64;
+const MAX_TOTAL_EXTERNAL_TOOLS: usize = 128;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -50,19 +51,19 @@ pub(crate) struct ExternalMcpRegistry {
 
 impl ExternalMcpRegistry {
     pub(crate) fn new() -> Self {
-        let configs = std::env::var("DROIDBRIDGE_EXTERNAL_MCP_SERVICES")
-            .ok()
-            .filter(|raw| raw.len() <= 65_536)
-            .and_then(|raw| serde_json::from_str::<Vec<ServerConfig>>(&raw).ok())
-            .filter(|configs| !configs.is_empty())
-            .unwrap_or_else(|| {
-                vec![ServerConfig {
-                    name: "mt".to_owned(),
-                    endpoint: std::env::var("DROIDBRIDGE_MT_MCP_URL")
-                        .unwrap_or_else(|_| DEFAULT_ENDPOINT.to_owned()),
-                    bearer_token: std::env::var("DROIDBRIDGE_MT_MCP_TOKEN").ok(),
-                }]
-            });
+        let configs = match std::env::var("DROIDBRIDGE_EXTERNAL_MCP_SERVICES") {
+            Ok(raw) if raw.len() <= 65_536 => {
+                // An explicit empty list disables external services; malformed input fails closed.
+                serde_json::from_str::<Vec<ServerConfig>>(&raw).unwrap_or_default()
+            }
+            Ok(_) => Vec::new(),
+            Err(_) => vec![ServerConfig {
+                name: "mt".to_owned(),
+                endpoint: std::env::var("DROIDBRIDGE_MT_MCP_URL")
+                    .unwrap_or_else(|_| DEFAULT_ENDPOINT.to_owned()),
+                bearer_token: std::env::var("DROIDBRIDGE_MT_MCP_TOKEN").ok(),
+            }],
+        };
 
         let mut seen_names = BTreeSet::new();
         let servers = configs
@@ -91,6 +92,11 @@ impl ExternalMcpRegistry {
         while let Some(Ok(tools)) = tasks.join_next().await {
             all.extend(tools);
         }
+        all.sort_by(|left, right| {
+            left.get("name").and_then(Value::as_str)
+                .cmp(&right.get("name").and_then(Value::as_str))
+        });
+        all.truncate(MAX_TOTAL_EXTERNAL_TOOLS);
         all
     }
 
