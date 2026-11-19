@@ -14,7 +14,10 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import com.droidbridge.ui.R
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
 
@@ -28,11 +31,23 @@ fun McpServersRoute(connection: DaemonConnection, onBack: () -> Unit) {
     var snapshot by remember { mutableStateOf("{}") }
     var message by remember { mutableStateOf("") }
 
+    val registryUpdated = stringResource(R.string.mcp_servers_registry_updated)
+    val daemonUnavailable = stringResource(R.string.mcp_servers_daemon_unavailable)
+    val addFailed = stringResource(R.string.mcp_servers_add_failed)
+    val added = stringResource(R.string.mcp_servers_added)
+    val stateUpdated = stringResource(R.string.mcp_servers_state_updated)
+    val updateFailed = stringResource(R.string.mcp_servers_update_failed)
+    val discoveryFinished = stringResource(R.string.mcp_servers_discovery_finished)
+    val connectionTestFailed = stringResource(R.string.mcp_servers_connection_test_failed)
+    val refreshFailed = stringResource(R.string.mcp_servers_refresh_failed)
+    val removed = stringResource(R.string.mcp_servers_removed)
+    val removeFailed = stringResource(R.string.mcp_servers_remove_failed)
+
     fun reload() {
         scope.launch {
             runCatching { connection.mcpServersList() }
-                .onSuccess { snapshot = it; message = "Registry updated" }
-                .onFailure { message = it.message ?: "Unable to contact DroidBridge daemon" }
+                .onSuccess { snapshot = it; message = registryUpdated }
+                .onFailure { message = daemonUnavailable }
         }
     }
     LaunchedEffect(Unit) { reload() }
@@ -41,27 +56,57 @@ fun McpServersRoute(connection: DaemonConnection, onBack: () -> Unit) {
     }.getOrDefault(emptyList())
 
     Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("MCP servers", style = MaterialTheme.typography.headlineSmall)
-        Text("Changes are shared by the local MCP endpoint and the existing OpenAI Secure Tunnel.")
-        OutlinedTextField(id, { id = it }, label = { Text("Service ID (e.g. mt-manager)") }, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(displayName, { displayName = it }, label = { Text("Display name") }, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(endpoint, { endpoint = it }, label = { Text("MCP endpoint URL") }, modifier = Modifier.fillMaxWidth())
-        Text("Safety: HTTP only, using a literal loopback or private-LAN IP. Public hosts, DNS names and HTTPS are blocked. Bearer tokens are accepted only for loopback URLs.")
-        OutlinedTextField(token, { token = it }, label = { Text("Bearer token (optional; write-only)") }, modifier = Modifier.fillMaxWidth())
+        Text(stringResource(R.string.mcp_servers_title), style = MaterialTheme.typography.headlineSmall)
+        Text(stringResource(R.string.mcp_servers_shared_description))
+        OutlinedTextField(
+            value = id,
+            onValueChange = { id = it },
+            label = { Text(stringResource(R.string.mcp_servers_service_id)) },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+        )
+        OutlinedTextField(
+            value = displayName,
+            onValueChange = { displayName = it },
+            label = { Text(stringResource(R.string.mcp_servers_display_name)) },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+        )
+        OutlinedTextField(
+            value = endpoint,
+            onValueChange = { endpoint = it },
+            label = { Text(stringResource(R.string.mcp_servers_endpoint_label)) },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+        )
+        Text(stringResource(R.string.mcp_servers_safety_note), style = MaterialTheme.typography.bodySmall)
+        OutlinedTextField(
+            value = token,
+            onValueChange = { token = it },
+            label = { Text(stringResource(R.string.mcp_servers_bearer_token)) },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+        )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = {
-                scope.launch {
-                    runCatching { connection.addMcpServer(id.trim(), displayName.trim(), endpoint.trim(), token.ifBlank { null }) }
-                        .onSuccess {
+            Button(
+                enabled = id.isNotBlank() && displayName.isNotBlank() && endpoint.isNotBlank(),
+                onClick = {
+                    scope.launch {
+                        runCatching {
+                            connection.addMcpServer(id.trim(), displayName.trim(), endpoint.trim(), token.ifBlank { null })
+                        }.onSuccess {
                             snapshot = it
-                            val error = runCatching { Json.parseToJsonElement(it).jsonObject["error"]?.jsonPrimitive?.contentOrNull }.getOrNull()
-                            message = error?.let { code -> "Add failed: $code" } ?: "Server added / discovery attempted"
+                            val error = runCatching {
+                                Json.parseToJsonElement(it).jsonObject["error"]?.jsonPrimitive?.contentOrNull
+                            }.getOrNull()
+                            message = error?.let { code -> "$addFailed: $code" } ?: added
                             token = ""
-                        }
-                        .onFailure { message = it.message ?: "Add failed" }
-                }
-            }) { Text("Add server") }
-            Button(onClick = { reload() }) { Text("Refresh list") }
+                        }.onFailure { message = addFailed }
+                    }
+                },
+            ) { Text(stringResource(R.string.mcp_servers_add)) }
+            Button(onClick = { reload() }) { Text(stringResource(R.string.mcp_servers_refresh_list)) }
         }
         Text(message, style = MaterialTheme.typography.bodySmall)
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -76,16 +121,26 @@ fun McpServersRoute(connection: DaemonConnection, onBack: () -> Unit) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text("$name ($serverId)", style = MaterialTheme.typography.titleMedium)
                         Text(url, style = MaterialTheme.typography.bodySmall)
-                        Text("Tools: $count · " + if (enabled) "Enabled" else "Disabled")
-                        if (!error.isNullOrBlank()) Text("Connection: $error", color = MaterialTheme.colorScheme.error)
+                        Text(
+                            stringResource(R.string.mcp_servers_tools_count, count) + " · " +
+                                stringResource(if (enabled) R.string.mcp_servers_enabled else R.string.mcp_servers_disabled),
+                        )
+                        if (!error.isNullOrBlank()) {
+                            Text(
+                                stringResource(R.string.mcp_servers_connection_error, error),
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(onClick = {
                                 scope.launch {
                                     runCatching { connection.setMcpServerEnabled(serverId, !enabled) }
-                                        .onSuccess { snapshot = it; message = "Server state updated" }
-                                        .onFailure { message = it.message ?: "Update failed" }
+                                        .onSuccess { snapshot = it; message = stateUpdated }
+                                        .onFailure { message = updateFailed }
                                 }
-                            }) { Text(if (enabled) "Disable" else "Enable") }
+                            }) {
+                                Text(stringResource(if (enabled) R.string.mcp_servers_disabled else R.string.mcp_servers_enabled))
+                            }
                             Button(onClick = {
                                 scope.launch {
                                     runCatching { connection.refreshMcpServer(serverId) }
@@ -93,24 +148,25 @@ fun McpServersRoute(connection: DaemonConnection, onBack: () -> Unit) {
                                             snapshot = it
                                             val reply = runCatching { Json.parseToJsonElement(it).jsonObject }.getOrNull()
                                             val refreshed = reply?.get("refreshed")?.jsonPrimitive?.contentOrNull == "true"
-                                            val error = reply?.get("error")?.jsonPrimitive?.contentOrNull
-                                            message = if (refreshed) "Discovery finished" else "Connection test failed: ${error ?: "UPSTREAM_UNAVAILABLE"}"
+                                            val errorCode = reply?.get("error")?.jsonPrimitive?.contentOrNull
+                                            message = if (refreshed) discoveryFinished
+                                                else "$connectionTestFailed: ${errorCode ?: "UPSTREAM_UNAVAILABLE"}"
                                         }
-                                        .onFailure { message = it.message ?: "Refresh failed" }
+                                        .onFailure { message = refreshFailed }
                                 }
-                            }) { Text("Test / refresh") }
+                            }) { Text(stringResource(R.string.mcp_servers_test_refresh)) }
                             Button(onClick = {
                                 scope.launch {
                                     runCatching { connection.removeMcpServer(serverId) }
-                                        .onSuccess { snapshot = it; message = "Server removed" }
-                                        .onFailure { message = it.message ?: "Remove failed" }
+                                        .onSuccess { snapshot = it; message = removed }
+                                        .onFailure { message = removeFailed }
                                 }
-                            }) { Text("Remove") }
+                            }) { Text(stringResource(R.string.mcp_servers_remove)) }
                         }
                     }
                 }
             }
         }
-        Button(onClick = onBack) { Text("Back") }
+        Button(onClick = onBack) { Text(stringResource(R.string.key_back)) }
     }
 }
