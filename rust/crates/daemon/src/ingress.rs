@@ -4,7 +4,7 @@
 //! answers with the committed state.
 
 use crate::settings::{SettingsStore, TunnelSettings, valid_api_key, valid_tunnel_id};
-use runtime::{McpFacade, McpHost, McpListener, TunnelClient, TunnelRuntime};
+use runtime::{ExternalMcpRegistry, McpFacade, McpHost, McpListener, TunnelClient, TunnelRuntime};
 use serde_json::{Value, json};
 
 const LISTENER_FAILED: &str = "MCP_LISTENER_FAILED";
@@ -20,6 +20,7 @@ pub(crate) struct DaemonIngress<H> {
     listener_failed: bool,
     tunnel: Option<(TunnelRuntime, TunnelSettings)>,
     tunnel_failed: bool,
+    external_registry: ExternalMcpRegistry,
 }
 
 impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
@@ -33,6 +34,13 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
             listener_failed: false,
             tunnel: None,
             tunnel_failed: false,
+            external_registry: {
+                let registry = ExternalMcpRegistry::from_environment();
+                if let Ok(Some(raw)) = settings.external_mcp() {
+                    let _ = registry.replace_json(&raw);
+                }
+                registry
+            },
         }
     }
 
@@ -50,6 +58,40 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
         self.reconcile_listener(mcp.map(|settings| settings.token));
         let tunnel = self.settings.tunnel().ok().flatten();
         self.reconcile_tunnel(tunnel.filter(|settings| settings.enabled));
+    }
+
+    /// Returns only non-secret metadata; endpoint and bearer credentials stay in the daemon.
+    pub(crate) fn external_mcp_settings(&self) -> Value {
+        let raw = match self.settings.external_mcp() {
+            Ok(Some(raw)) => raw,
+            Ok(None) => "[]".to_owned(),
+            Err(_) => return failure("IO_ERROR"),
+        };
+        let services: Vec<Value> = serde_json::from_str::<Vec<Value>>(&raw).unwrap_or_default()
+            .into_iter().filter_map(|item| {
+                let name = item.get("name")?.as_str()?;
+                Some(json!({
+                    "name": name,
+                    "has_bearer_token": item.get("bearer_token").and_then(Value::as_str).is_some_and(|v| !v.is_empty())
+                }))
+            }).collect();
+        json!({"schema_version": 1, "services": services})
+    }
+
+    pub(crate) fn external_mcp_replace(&mut self, raw: &str) -> Value {
+        // Validate before committing. The probe is isolated and performs no network requests.
+        let probe = ExternalMcpRegistry::from_environment();
+        if let Err(code) = probe.replace_json(raw) { return failure(code); }
+        let previous = self.settings.external_mcp().ok().flatten();
+        if self.settings.commit_external_mcp(raw).is_err() { return failure("PERSISTENCE_FAILED"); }
+        if let Err(code) = self.external_registry.replace_json(raw) {
+            if let Some(previous) = previous {
+                let _ = self.settings.commit_external_mcp(&previous);
+                let _ = self.external_registry.replace_json(&previous);
+            }
+            return failure(code);
+        }
+        json!({"schema_version": 1, "applied": true, "service_count": serde_json::from_str::<Vec<Value>>(raw).map(|v| v.len()).unwrap_or(0)})
     }
 
     pub(crate) fn mcp_settings(&mut self) -> Value {
@@ -263,7 +305,7 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
             }
             self.stop_listener();
         }
-        let started = McpFacade::new(host, self.product_version.clone())
+        let started = McpFacade::new_with_external_registry(host, self.product_version.clone(), self.external_registry.clone())
             .and_then(|facade| McpListener::start(self.port, token.clone(), facade));
         match started {
             Ok(listener) => {
