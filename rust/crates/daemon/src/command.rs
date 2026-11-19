@@ -609,10 +609,10 @@ impl RootCommandGuard {
         stdout_file: Option<fs::File>,
     ) -> Result<CommandProcessSettlement, ExecutionFailure> {
         #[cfg(target_os = "android")]
-        if unsafe { libc::geteuid() } != 0 {
+        if unsafe { libc::getuid() } != 0 || unsafe { libc::geteuid() } != 0 {
             return Err(pre_start(DomainError::new(
                 ErrorCode::PermissionDenied,
-                "Magisk command daemon is not UID 0",
+                "Magisk command daemon real/effective UID must both be 0",
             )));
         }
         if !self.guard_path.is_absolute() || !self.guard_path.is_file() {
