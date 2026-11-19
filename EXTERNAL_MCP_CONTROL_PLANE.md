@@ -37,7 +37,7 @@ used by `DaemonConnection`. These Root operations are implemented:
 - `external_mcp_replace` with `{services_json:"[...]"}`
 - `external_mcp_reload` (implemented for the Root daemon; APK/Shizuku hosts remain pending)
 
-The daemon validates service names, duplicate IDs, endpoint policy, service count and credential bounds. The replace response is redacted; credentials are accepted only in the replace request and are never echoed. The committed file is stored atomically with owner-only permissions.
+The daemon validates service names, duplicate IDs, endpoint policy, service count and credential bounds. The replace response is redacted; credentials are accepted only in the replace request and are never echoed. Omitting `bearer_token` for an existing service ID preserves the saved credential; explicit `null` clears it. The committed file is stored atomically with owner-only permissions.
 
 ## APK AIDL operations
 
