@@ -65,6 +65,8 @@ Use stable machine-readable codes, not exception text:
 - `PERSISTENCE_FAILED`
 - `RELOAD_FAILED`
 - `RUNTIME_UNAVAILABLE`
+- `NOT_CONFIGURED`
+- `IO_ERROR`
 
 Never include endpoint credentials or request headers in error messages.
 
