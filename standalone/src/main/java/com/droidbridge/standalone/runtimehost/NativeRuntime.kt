@@ -8,6 +8,7 @@ internal object NativeRuntime {
     external fun nativeMcpSetToken(token: String): Boolean
     external fun nativeMcpStop(): Boolean
     external fun nativeMcpState(): String?
+    external fun nativeMcpReplaceExternalServices(servicesJson: String): String?
     external fun nativeTunnelStart(tunnelId: String, apiKey: String, productVersion: String): Boolean
 
     external fun nativeTunnelValidate(tunnelId: String, apiKey: String, productVersion: String): String?
