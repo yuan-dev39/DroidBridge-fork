@@ -5,6 +5,7 @@ use reqwest::{header, Client, Url};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::{
+    collections::BTreeSet,
     net::IpAddr,
     time::Duration,
 };
@@ -50,6 +51,7 @@ impl ExternalMcpRegistry {
     pub(crate) fn new() -> Self {
         let configs = std::env::var("DROIDBRIDGE_EXTERNAL_MCP_SERVICES")
             .ok()
+            .filter(|raw| raw.len() <= 65_536)
             .and_then(|raw| serde_json::from_str::<Vec<ServerConfig>>(&raw).ok())
             .filter(|configs| !configs.is_empty())
             .unwrap_or_else(|| {
@@ -61,9 +63,11 @@ impl ExternalMcpRegistry {
                 }]
             });
 
+        let mut seen_names = BTreeSet::new();
         let servers = configs
             .into_iter()
             .take(MAX_SERVERS)
+            .filter(|config| seen_names.insert(config.name.clone()))
             .filter_map(ExternalMcpServer::new)
             .collect();
         Self { servers }
