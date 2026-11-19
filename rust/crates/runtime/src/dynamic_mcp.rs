@@ -430,7 +430,7 @@ mod tests {
                         }));
                     }
                     (3, "tools/call") => {
-                        assert!(headers.contains("Mcp-Session-Id: session-test"));
+                        assert!(headers.to_ascii_lowercase().contains("mcp-session-id: session-test"));
                         assert_eq!(request["params"]["name"], "echo");
                         assert_eq!(request["params"]["arguments"]["text"], "hello");
                         write_mock_response(&mut stream, "200 OK", "Mcp-Session-Id: session-test\r\n", &json!({
