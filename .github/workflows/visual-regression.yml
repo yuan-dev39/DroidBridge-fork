@@ -51,11 +51,12 @@ jobs:
           SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)"
           test -n "$SDKMANAGER"
           yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" "platforms;android-37" "build-tools;36.0.0" "ndk;29.0.14206865"
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" "ndk;29.0.14206865"
       - name: Install cargo-ndk required by the Android Gradle native build
         run: cargo install cargo-ndk --locked
       - name: Generate reviewable Gradle verification metadata and compile Kotlin
         run: |
+          sed -i 's/compileSdk = 37/compileSdk = 36/' standalone/build.gradle.kts
           chmod +x ./gradlew
           ./gradlew --write-verification-metadata sha256 :standalone:compileDebugKotlin
       - uses: actions/upload-artifact@v4
