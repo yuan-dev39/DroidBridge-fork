@@ -16,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.droidbridge.ui.R
 import kotlinx.coroutines.launch
@@ -30,6 +31,11 @@ fun McpServersRoute(connection: DaemonConnection, onBack: () -> Unit) {
     var token by remember { mutableStateOf("") }
     var snapshot by remember { mutableStateOf("{}") }
     var message by remember { mutableStateOf("") }
+    var lanSnapshot by remember { mutableStateOf("{}") }
+    var lanPortInput by remember { mutableStateOf("18767") }
+    var lanToken by remember { mutableStateOf("") }
+    var showLanToken by remember { mutableStateOf(false) }
+    var lanMessage by remember { mutableStateOf("") }
 
     val registryUpdated = stringResource(R.string.mcp_servers_registry_updated)
     val daemonUnavailable = stringResource(R.string.mcp_servers_daemon_unavailable)
@@ -50,14 +56,110 @@ fun McpServersRoute(connection: DaemonConnection, onBack: () -> Unit) {
                 .onFailure { message = daemonUnavailable }
         }
     }
-    LaunchedEffect(Unit) { reload() }
+    fun reloadLan() {
+        scope.launch {
+            runCatching { connection.mcpLanSettings() }
+                .onSuccess { value ->
+                    lanSnapshot = value
+                    lanPortInput = runCatching {
+                        Json.parseToJsonElement(value).jsonObject["port"]?.jsonPrimitive?.contentOrNull ?: "18767"
+                    }.getOrDefault("18767")
+                }
+                .onFailure { lanMessage = daemonUnavailable }
+        }
+    }
+    LaunchedEffect(Unit) { reload(); reloadLan() }
     val servers = runCatching {
         Json.parseToJsonElement(snapshot).jsonObject["servers"]?.jsonArray?.map { it.jsonObject }.orEmpty()
     }.getOrDefault(emptyList())
+    val lanObject = runCatching { Json.parseToJsonElement(lanSnapshot).jsonObject }.getOrDefault(JsonObject(emptyMap()))
+    val lanEnabled = lanObject["enabled"]?.jsonPrimitive?.contentOrNull == "true"
+    val lanEndpoint = lanObject["endpoint"]?.jsonPrimitive?.contentOrNull
+    val lanState = stringResource(if (lanEnabled) R.string.mcp_servers_enabled else R.string.mcp_servers_disabled)
 
     Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(stringResource(R.string.mcp_servers_title), style = MaterialTheme.typography.headlineSmall)
         Text(stringResource(R.string.mcp_servers_shared_description))
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.mcp_lan_title), style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.mcp_lan_description), style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.mcp_lan_status, lanState))
+                OutlinedTextField(
+                    value = lanPortInput,
+                    onValueChange = { lanPortInput = it.filter(Char::isDigit).take(5) },
+                    label = { Text(stringResource(R.string.mcp_lan_port)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                )
+                if (lanEndpoint.isNullOrBlank()) {
+                    Text(stringResource(R.string.mcp_lan_no_address), style = MaterialTheme.typography.bodySmall)
+                } else {
+                    Text(stringResource(R.string.mcp_lan_endpoint, lanEndpoint), style = MaterialTheme.typography.bodySmall)
+                }
+                Text(stringResource(R.string.mcp_lan_private_only), style = MaterialTheme.typography.bodySmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = {
+                        scope.launch {
+                            runCatching { connection.setMcpLanEnabled(!lanEnabled) }
+                                .onSuccess { lanSnapshot = it; lanMessage = "" }
+                                .onFailure { lanMessage = daemonUnavailable }
+                        }
+                    }) {
+                        Text(stringResource(if (lanEnabled) R.string.mcp_lan_disable else R.string.mcp_lan_enable))
+                    }
+                    Button(
+                        enabled = lanPortInput.toIntOrNull() in 1024..65535,
+                        onClick = {
+                            scope.launch {
+                                runCatching { connection.setMcpLanPort(lanPortInput.toInt()) }
+                                    .onSuccess { lanSnapshot = it; lanMessage = "" }
+                                    .onFailure { lanMessage = daemonUnavailable }
+                            }
+                        },
+                    ) { Text(stringResource(R.string.mcp_lan_apply_port)) }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = {
+                        scope.launch {
+                            runCatching { connection.revealMcpLanToken() }
+                                .onSuccess { value ->
+                                    lanToken = runCatching {
+                                        Json.parseToJsonElement(value).jsonObject["token"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                                    }.getOrDefault("")
+                                    showLanToken = true
+                                }
+                                .onFailure { lanMessage = daemonUnavailable }
+                        }
+                    }) { Text(stringResource(R.string.mcp_lan_reveal_token)) }
+                    Button(onClick = {
+                        scope.launch {
+                            runCatching { connection.rotateMcpLanToken() }
+                                .onSuccess { status ->
+                                    lanSnapshot = status
+                                    runCatching { connection.revealMcpLanToken() }.onSuccess { value ->
+                                        lanToken = Json.parseToJsonElement(value).jsonObject["token"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                                        showLanToken = true
+                                    }
+                                }
+                                .onFailure { lanMessage = daemonUnavailable }
+                        }
+                    }) { Text(stringResource(R.string.mcp_lan_rotate_token)) }
+                }
+                if (lanToken.isNotBlank()) {
+                    OutlinedTextField(
+                        value = lanToken,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text(stringResource(R.string.mcp_lan_token)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        visualTransformation = if (showLanToken) VisualTransformation.None else PasswordVisualTransformation(),
+                    )
+                }
+                if (lanMessage.isNotBlank()) Text(lanMessage, color = MaterialTheme.colorScheme.error)
+            }
+        }
         OutlinedTextField(
             value = id,
             onValueChange = { id = it },
