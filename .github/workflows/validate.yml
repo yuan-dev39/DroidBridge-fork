@@ -120,7 +120,7 @@ jobs:
           "ANDROID_SDK_ROOT=$sdkRoot" | Out-File -FilePath $env:GITHUB_ENV -Append
           1..100 | ForEach-Object { "y" } | & $sdkManager.FullName --licenses
           if ($LASTEXITCODE -ne 0) { throw "Android SDK license acceptance failed" }
-          & $sdkManager.FullName --install "platforms;android-36" "platforms;android-37.0" "build-tools;36.0.0" "ndk;29.0.14206865"
+          & $sdkManager.FullName --install "platforms;android-36" "platforms;android-37.0" "build-tools;36.0.0" "cmake;3.31.6" "ndk;29.0.14206865"
           if ($LASTEXITCODE -ne 0) { throw "Android SDK package installation failed" }
       - uses: dtolnay/rust-toolchain@stable
         with:
