@@ -2,7 +2,11 @@
 //! that frames them; initialization-based clients of the 2025 revisions are served alongside. The facade owns no Task, Automation, capability or host truth: every tool call
 //! and resource query goes to the currently authoritative Runtime through [`McpHost`].
 
-use crate::{PortFuture, command::new_uuid};
+use crate::{
+    PortFuture,
+    command::new_uuid,
+    mcp_external::{ExternalMcpRegistry, is_external_tool},
+};
 use base64::{
     Engine,
     engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
@@ -410,6 +414,7 @@ pub struct McpFacade<H> {
     host: H,
     product_version: String,
     tools: Value,
+    external: ExternalMcpRegistry,
 }
 
 impl<H: McpHost> McpFacade<H> {
@@ -422,10 +427,31 @@ impl<H: McpHost> McpFacade<H> {
                 "MCP product version is empty",
             ));
         }
+        Self::new_with_external_registry(
+            host,
+            product_version,
+            ExternalMcpRegistry::from_environment(),
+        )
+    }
+
+    /// Builds a facade using a daemon-owned registry handle that can be hot-reloaded without
+    /// restarting the listener or discarding unchanged remote MCP sessions.
+    pub fn new_with_external_registry(
+        host: H,
+        product_version: String,
+        external: ExternalMcpRegistry,
+    ) -> Result<Self, DomainError> {
+        if product_version.is_empty() {
+            return Err(DomainError::new(
+                ErrorCode::InvalidArgument,
+                "MCP product version is empty",
+            ));
+        }
         Ok(Self {
             host,
             product_version,
             tools: tool_definitions()?,
+            external,
         })
     }
 
@@ -530,7 +556,7 @@ impl<H: McpHost> McpFacade<H> {
         }
         match method.as_str() {
             "server/discover" => self.discover(id, &params),
-            "tools/list" => self.list_tools(id, &params),
+            "tools/list" => self.list_tools(id, &params).await,
             "tools/call" => self.call_tool(id, &params, false).await,
             "resources/list" => self.list_resources(id, &params).await,
             "resources/read" => self.read_resource(id, &params, false).await,
@@ -550,7 +576,7 @@ impl<H: McpHost> McpFacade<H> {
         let response = match method {
             "initialize" => return self.initialize(id, params),
             "ping" => return rpc_result(id, json!({})),
-            "tools/list" => self.list_tools(id, params),
+            "tools/list" => self.list_tools(id, params).await,
             "tools/call" => self.call_tool(id, params, true).await,
             "resources/list" => self.list_resources(id, params).await,
             "resources/read" => self.read_resource(id, params, true).await,
@@ -610,23 +636,25 @@ impl<H: McpHost> McpFacade<H> {
         )
     }
 
-    fn list_tools(&self, id: Value, params: &Map<String, Value>) -> McpResponse {
+    async fn list_tools(&self, id: Value, params: &Map<String, Value>) -> McpResponse {
         if !only_keys(params, &["_meta", "cursor"]) {
             return invalid_params(id, field_detail("params", "expected only _meta and cursor"));
         }
         match params.get("cursor") {
             None => {}
             Some(Value::String(cursor)) if cursor.is_empty() => {}
-            // tools/list always fits one page, so no cursor was ever issued.
+            // The merged native and external registry currently fits one page.
             Some(_) => {
                 return invalid_params(id, field_detail("params.cursor", "no such page"));
             }
         }
+        let mut tools = self.tools.as_array().cloned().unwrap_or_default();
+        tools.extend(self.external.tools().await);
         rpc_result(
             id,
             json!({
                 "resultType": "complete",
-                "tools": self.tools,
+                "tools": tools,
                 "ttlMs": 0,
                 "cacheScope": "private",
                 "_meta": self.server_meta(),
@@ -650,9 +678,32 @@ impl<H: McpHost> McpFacade<H> {
         if !shaped || !only_keys(params, &["name", "arguments", "_meta"]) {
             return invalid_params(id, field_detail("params", expected));
         }
-        let Some(name) = params["name"]
-            .as_str()
-            .filter(|name| MCP_TOOL_NAMES.contains(name))
+        let Some(requested_name) = params["name"].as_str() else {
+            return invalid_params(id, field_detail("params.name", "expected a tool name"));
+        };
+        if is_external_tool(requested_name) {
+            let Some(arguments) = params["arguments"].as_object() else {
+                return invalid_params(id, field_detail("params.arguments", "expected an object"));
+            };
+            return match self
+                .external
+                .call(requested_name, Value::Object(arguments.clone()))
+                .await
+            {
+                Ok(result) => rpc_result(id, result),
+                Err(_) => rpc_error(
+                    200,
+                    id,
+                    INTERNAL_ERROR,
+                    "External MCP tool call failed",
+                    None,
+                ),
+            };
+        }
+        let Some(name) = MCP_TOOL_NAMES
+            .iter()
+            .copied()
+            .find(|name| *name == requested_name)
         else {
             return invalid_params(id, field_detail("params.name", "not an advertised tool"));
         };

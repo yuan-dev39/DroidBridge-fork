@@ -162,7 +162,7 @@ internal class RuntimeHostController(
         val generation = platformGeneration.incrementAndGet()
         val localNetwork = if (Build.VERSION.SDK_INT <= 36) {
             "available"
-        } else if (application.checkSelfPermission(Manifest.permission.ACCESS_LOCAL_NETWORK) == PackageManager.PERMISSION_GRANTED) {
+        } else if (application.checkSelfPermission("android.permission.ACCESS_LOCAL_NETWORK") == PackageManager.PERMISSION_GRANTED) {
             "available"
         } else {
             "unavailable"

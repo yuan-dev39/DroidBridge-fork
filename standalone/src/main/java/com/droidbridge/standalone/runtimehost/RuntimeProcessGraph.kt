@@ -34,6 +34,7 @@ import java.util.concurrent.atomic.AtomicReference
 internal class RuntimeProcessGraph(application: Application) {
     val hostController: RuntimeHostController
     val mcpSettings: McpSettingsController
+    val externalMcpSettings: ExternalMcpSettingsController
     val tunnelSettings: TunnelSettingsController
     val keepAliveSettings: KeepAliveSettings
     val androidExecutionRegistry: AndroidExecutionRegistry
@@ -53,18 +54,24 @@ internal class RuntimeProcessGraph(application: Application) {
         McpHostBridge.install(hostController)
         val mcpPort = if (application.packageName.endsWith(DEBUG_PACKAGE_SUFFIX)) MCP_DEBUG_PORT else MCP_STABLE_PORT
         val settingsDirectory = File(application.createDeviceProtectedStorageContext().filesDir, "droidbridge")
+        val settingsFileSystem = AndroidMcpSettingsFileSystem()
         mcpSettings = McpSettingsController(
             settingsDirectory,
             NativeMcpListener(BuildConfig.VERSION_NAME),
             mcpPort,
-            AndroidMcpSettingsFileSystem(),
+            settingsFileSystem,
         )
+        externalMcpSettings = ExternalMcpSettingsController(
+            settingsDirectory,
+            NativeExternalMcpRegistry(),
+            settingsFileSystem,
+        ).also { it.restore() }
         tunnelSettings = TunnelSettingsController(
             settingsDirectory,
             NativeTunnelRuntime(BuildConfig.VERSION_NAME),
             AndroidTunnelNetworkMonitor(application.getSystemService(ConnectivityManager::class.java)),
             AndroidTunnelCredentialCipher(),
-            AndroidMcpSettingsFileSystem(),
+            settingsFileSystem,
         )
         keepAliveSettings = KeepAliveSettings(settingsDirectory)
         visualDisplay = VisualDisplayTracker(application)

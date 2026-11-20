@@ -9,12 +9,13 @@ use jni::{
     sys::{JNI_FALSE, JNI_TRUE, jboolean, jint, jstring},
 };
 use runtime::{
-    MCP_DEBUG_PORT, MCP_STABLE_PORT, McpArtifactReply, McpFacade, McpHost, McpListener, PortFuture,
+    ExternalMcpRegistry, MCP_DEBUG_PORT, MCP_STABLE_PORT, McpArtifactReply, McpFacade, McpHost,
+    McpListener, PortFuture,
 };
 use serde_json::Value;
 use std::{
     ptr,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, OnceLock},
     time::Duration,
 };
 use tokio::sync::{Semaphore, oneshot};
@@ -26,6 +27,18 @@ const MAX_HOST_CALLS: usize = 16;
 const HOST_SLOT_WAIT: Duration = Duration::from_secs(10);
 
 static LISTENER: Mutex<Option<McpListener>> = Mutex::new(None);
+static EXTERNAL_REGISTRY: OnceLock<ExternalMcpRegistry> = OnceLock::new();
+
+fn external_registry() -> &'static ExternalMcpRegistry {
+    EXTERNAL_REGISTRY.get_or_init(ExternalMcpRegistry::from_environment)
+}
+
+pub(crate) fn replace_external_services(raw: &str) -> &'static str {
+    match external_registry().replace_json(raw) {
+        Ok(()) => "OK",
+        Err(code) => code,
+    }
+}
 
 /// The Kotlin HostController, which submits to the APK Runtime.
 pub(crate) struct KotlinMcpHost {
@@ -97,7 +110,11 @@ pub(crate) fn initialize_host_bridge(env: &mut jni::Env<'_>) -> jni::errors::Res
 pub(crate) fn kotlin_facade(
     product_version: String,
 ) -> Result<McpFacade<KotlinMcpHost>, DomainError> {
-    McpFacade::new(KotlinMcpHost::new(), product_version)
+    McpFacade::new_with_external_registry(
+        KotlinMcpHost::new(),
+        product_version,
+        external_registry().clone(),
+    )
 }
 
 impl McpHost for KotlinMcpHost {
@@ -292,6 +309,26 @@ pub extern "system" fn Java_com_droidbridge_standalone_runtimehost_NativeRuntime
     {
         Outcome::Ok(value) => value,
         Outcome::Err(_) | Outcome::Panic(_) => JNI_FALSE,
+    }
+}
+
+/// Replaces the shared external MCP registry used by the listener and all later facades.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_droidbridge_standalone_runtimehost_NativeRuntime_nativeMcpReplaceExternalServices(
+    mut env: EnvUnowned,
+    _class: JClass,
+    services_json: JString,
+) -> jstring {
+    match env
+        .with_env(|owned| -> jni::errors::Result<jstring> {
+            let raw = services_json.mutf8_chars(owned)?.to_str().into_owned();
+            let result = replace_external_services(&raw);
+            Ok(owned.new_string(result)?.into_raw())
+        })
+        .into_outcome()
+    {
+        Outcome::Ok(value) => value,
+        Outcome::Err(_) | Outcome::Panic(_) => ptr::null_mut(),
     }
 }
 

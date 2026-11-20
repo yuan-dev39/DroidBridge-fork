@@ -263,6 +263,11 @@ impl Daemon {
             "status" => Ok(self.status()),
             "submit" => self.submit(payload),
             "mcp_settings" => Ok(self.ingress().mcp_settings()),
+            "external_mcp_settings" => Ok(self.ingress().external_mcp_settings()),
+            "external_mcp_reload" => Ok(self.ingress().external_mcp_reload()),
+            "external_mcp_replace" => text("services_json")
+                .map(|raw| self.ingress().external_mcp_replace(raw))
+                .ok_or_else(invalid_payload),
             "mcp_set_enabled" => flag("enabled")
                 .map(|enabled| self.ingress().mcp_set_enabled(enabled))
                 .ok_or_else(invalid_payload),

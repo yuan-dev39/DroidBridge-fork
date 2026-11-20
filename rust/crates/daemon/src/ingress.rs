@@ -4,7 +4,7 @@
 //! answers with the committed state.
 
 use crate::settings::{SettingsStore, TunnelSettings, valid_api_key, valid_tunnel_id};
-use runtime::{McpFacade, McpHost, McpListener, TunnelClient, TunnelRuntime};
+use runtime::{ExternalMcpRegistry, McpFacade, McpHost, McpListener, TunnelClient, TunnelRuntime};
 use serde_json::{Value, json};
 
 const LISTENER_FAILED: &str = "MCP_LISTENER_FAILED";
@@ -20,10 +20,28 @@ pub(crate) struct DaemonIngress<H> {
     listener_failed: bool,
     tunnel: Option<(TunnelRuntime, TunnelSettings)>,
     tunnel_failed: bool,
+    external_registry: ExternalMcpRegistry,
 }
 
 impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
     pub(crate) fn new(settings: SettingsStore, port: u16) -> Self {
+        let external_registry = {
+            let registry = ExternalMcpRegistry::from_environment();
+            match settings.external_mcp() {
+                Ok(Some(raw)) => {
+                    if registry.replace_json(&raw).is_err() {
+                        // A corrupt persisted snapshot must never fall back to environment secrets.
+                        let _ = registry.replace_json("[]");
+                    }
+                }
+                Ok(None) => {}
+                Err(_) => {
+                    // Insecure or unreadable persisted credentials fail closed.
+                    let _ = registry.replace_json("[]");
+                }
+            }
+            registry
+        };
         Self {
             settings,
             port,
@@ -33,6 +51,7 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
             listener_failed: false,
             tunnel: None,
             tunnel_failed: false,
+            external_registry,
         }
     }
 
@@ -50,6 +69,105 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
         self.reconcile_listener(mcp.map(|settings| settings.token));
         let tunnel = self.settings.tunnel().ok().flatten();
         self.reconcile_tunnel(tunnel.filter(|settings| settings.enabled));
+    }
+
+    /// Returns only non-secret metadata; endpoint and bearer credentials stay in the daemon.
+    pub(crate) fn external_mcp_settings(&self) -> Value {
+        let raw = match self.settings.external_mcp() {
+            Ok(Some(raw)) => raw,
+            Ok(None) => "[]".to_owned(),
+            Err(_) => return failure("IO_ERROR"),
+        };
+        let services: Vec<Value> = match serde_json::from_str::<Vec<Value>>(&raw) {
+            Ok(services) => services,
+            Err(_) => return failure("INVALID_CONFIG"),
+        };
+        let services: Vec<Value> = services.into_iter().filter_map(|item| {
+                let name = item.get("name")?.as_str()?;
+                Some(json!({
+                    "name": name,
+                    "endpoint": item.get("endpoint").and_then(Value::as_str).unwrap_or(""),
+                    "enabled": item.get("enabled").and_then(Value::as_bool).unwrap_or(true),
+                    "has_bearer_token": item.get("bearer_token").and_then(Value::as_str).is_some_and(|v| !v.is_empty())
+                }))
+            }).collect();
+        json!({"schema_version": 1, "services": services})
+    }
+
+    pub(crate) fn external_mcp_reload(&mut self) -> Value {
+        let raw = match self.settings.external_mcp() {
+            Ok(Some(raw)) => raw,
+            Ok(None) => return failure("NOT_CONFIGURED"),
+            Err(_) => return failure("IO_ERROR"),
+        };
+        match self.external_registry.replace_json(&raw) {
+            Ok(()) => json!({"schema_version": 1, "reloaded": true}),
+            Err(code) => failure(code),
+        }
+    }
+
+    pub(crate) fn external_mcp_replace(&mut self, raw: &str) -> Value {
+        // An omitted credential means "keep the existing one" for a service with the same name.
+        // An explicit JSON null means "clear it". The effective snapshot is what gets validated
+        // and persisted, so credentials never need to be returned to the frontend.
+        let mut incoming: Vec<Value> = match serde_json::from_str(raw) {
+            Ok(value) => value,
+            Err(_) => return failure("INVALID_CONFIG"),
+        };
+        let previous = match self.settings.external_mcp() {
+            Ok(previous) => previous,
+            Err(_) => return failure("IO_ERROR"),
+        };
+        if let Some(previous_raw) = previous.as_deref() {
+            if let Ok(previous_services) = serde_json::from_str::<Vec<Value>>(previous_raw) {
+                for service in &mut incoming {
+                    let Some(name) = service.get("name").and_then(Value::as_str) else {
+                        continue;
+                    };
+                    let has_credential_field = service
+                        .as_object()
+                        .is_some_and(|object| object.contains_key("bearer_token"));
+                    if !has_credential_field {
+                        if let Some(token) = previous_services
+                            .iter()
+                            .find(|old| old.get("name").and_then(Value::as_str) == Some(name))
+                            .and_then(|old| old.get("bearer_token"))
+                            .filter(|token| !token.is_null())
+                            .cloned()
+                        {
+                            if let Some(object) = service.as_object_mut() {
+                                object.insert("bearer_token".to_owned(), token);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        let effective_raw = match serde_json::to_string(&incoming) {
+            Ok(value) => value,
+            Err(_) => return failure("INVALID_CONFIG"),
+        };
+        let probe = ExternalMcpRegistry::from_environment();
+        if let Err(code) = probe.replace_json(&effective_raw) {
+            return failure(code);
+        }
+        if self.settings.commit_external_mcp(&effective_raw).is_err() {
+            return failure("PERSISTENCE_FAILED");
+        }
+        if let Err(code) = self.external_registry.replace_json(&effective_raw) {
+            // replace_json swaps only after the full replacement has been constructed, so the
+            // previous in-memory registry is still active. Restore only the durable snapshot.
+            let rolled_back = match previous.as_deref() {
+                Some(previous) => self.settings.commit_external_mcp(previous).is_ok(),
+                None => self.settings.clear_external_mcp().is_ok(),
+            };
+            return failure(if rolled_back {
+                code
+            } else {
+                "PERSISTENCE_FAILED"
+            });
+        }
+        json!({"schema_version": 1, "applied": true, "service_count": incoming.len()})
     }
 
     pub(crate) fn mcp_settings(&mut self) -> Value {
@@ -263,8 +381,12 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
             }
             self.stop_listener();
         }
-        let started = McpFacade::new(host, self.product_version.clone())
-            .and_then(|facade| McpListener::start(self.port, token.clone(), facade));
+        let started = McpFacade::new_with_external_registry(
+            host,
+            self.product_version.clone(),
+            self.external_registry.clone(),
+        )
+        .and_then(|facade| McpListener::start(self.port, token.clone(), facade));
         match started {
             Ok(listener) => {
                 self.listener = Some((listener, token));
@@ -287,18 +409,22 @@ impl<H: McpHost + Clone + 'static> DaemonIngress<H> {
             return;
         }
         self.stop_tunnel();
-        let started = McpFacade::new(host, self.product_version.clone())
+        let started = McpFacade::new_with_external_registry(
+            host,
+            self.product_version.clone(),
+            self.external_registry.clone(),
+        )
+        .map_err(|_| ())
+        .and_then(|facade| {
+            TunnelClient::new(
+                facade,
+                &settings.tunnel_id,
+                &settings.api_key,
+                &self.product_version,
+            )
             .map_err(|_| ())
-            .and_then(|facade| {
-                TunnelClient::new(
-                    facade,
-                    &settings.tunnel_id,
-                    &settings.api_key,
-                    &self.product_version,
-                )
-                .map_err(|_| ())
-            })
-            .and_then(|client| TunnelRuntime::start(client).map_err(|_| ()));
+        })
+        .and_then(|client| TunnelRuntime::start(client).map_err(|_| ()));
         match started {
             Ok(tunnel) => self.tunnel = Some((tunnel, settings)),
             Err(()) => self.tunnel_failed = true,

@@ -41,6 +41,7 @@ class DroidBridgeService : Service() {
     private lateinit var mediaProjection: MediaProjectionVisualController
     private lateinit var mcpSettings: McpSettingsController
     private lateinit var tunnelSettings: TunnelSettingsController
+    private lateinit var externalMcpSettings: ExternalMcpSettingsController
     private lateinit var keepAliveSettings: KeepAliveSettings
     @Volatile private var tunnelEnabled = false
     @Volatile private var mcpEnabled = false
@@ -164,6 +165,21 @@ class DroidBridgeService : Service() {
             return this@DroidBridgeService.tunnelSettings.clear(::setTunnelForeground)
         }
 
+        override fun getExternalMcpSettings(): String {
+            verifyCaller()
+            return this@DroidBridgeService.externalMcpSettings.settings()
+        }
+
+        override fun replaceExternalMcpServices(servicesJson: String?): String {
+            verifyCaller()
+            return this@DroidBridgeService.externalMcpSettings.replace(requireNotNull(servicesJson))
+        }
+
+        override fun reloadExternalMcpServices(): String {
+            verifyCaller()
+            return this@DroidBridgeService.externalMcpSettings.reload()
+        }
+
         override fun getMaintenanceState(): String {
             verifyCaller()
             return hostController.maintenanceState()
@@ -230,6 +246,7 @@ class DroidBridgeService : Service() {
         hostController = graph.hostController
         mcpSettings = graph.mcpSettings
         tunnelSettings = graph.tunnelSettings
+        externalMcpSettings = graph.externalMcpSettings
         keepAliveSettings = graph.keepAliveSettings
         hostController.setHintSink(::publishHint)
         foregroundReasons = ForegroundReasonRegistry(

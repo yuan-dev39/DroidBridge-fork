@@ -3,6 +3,7 @@ package com.droidbridge.standalone
 import android.app.Application
 import android.content.Context
 import com.droidbridge.standalone.runtimehost.RuntimeProcessGraph
+import com.droidbridge.ui.common.followSystemLocale
 import rikka.shizuku.ShizukuProvider
 
 class DroidBridgeApplication : Application() {
@@ -17,7 +18,9 @@ class DroidBridgeApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        processGraph = when (classifyProcess(Application.getProcessName(), packageName)) {
+        val role = classifyProcess(Application.getProcessName(), packageName)
+        if (role == ProcessRole.Default) followSystemLocale()
+        processGraph = when (role) {
             ProcessRole.Default -> AppGraph(this)
             ProcessRole.Runtime -> RuntimeProcessGraph(this)
             ProcessRole.Unexpected -> null

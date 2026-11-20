@@ -32,6 +32,18 @@ interface RuntimeConnection {
 
     suspend fun clearTunnel(): String
 
+    /** Redacted external MCP service metadata; never contains bearer credentials. */
+    suspend fun externalMcpSettings(): String =
+        throw UnsupportedOperationException("external MCP management is not supported by this Runtime host")
+
+    /** Atomically replaces the external MCP service JSON snapshot. */
+    suspend fun replaceExternalMcpServices(servicesJson: String): String =
+        throw UnsupportedOperationException("external MCP management is not supported by this Runtime host")
+
+    /** Reapplies the last durably committed external MCP snapshot. */
+    suspend fun reloadExternalMcpServices(): String =
+        throw UnsupportedOperationException("external MCP management is not supported by this Runtime host")
+
     /** The S-UI-017 `{schema_version,blocker,cleanup}` reply or `{error}`. */
     suspend fun maintenanceState(): String
 

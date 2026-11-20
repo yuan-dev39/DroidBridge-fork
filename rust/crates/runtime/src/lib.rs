@@ -14,6 +14,8 @@ pub mod fakes;
 mod filesystem;
 mod ingress;
 mod mcp;
+mod mcp_external;
+pub use mcp_external::ExternalMcpRegistry;
 mod mcp_listener;
 mod network;
 mod ports;

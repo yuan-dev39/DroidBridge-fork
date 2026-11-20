@@ -69,6 +69,8 @@ android {
     }
 
     androidResources {
+        // Generate Android's per-app locale config from ui-common resources. With no app-level
+        // locale override, Android resolves Chinese/Japanese/English from the device language.
         generateLocaleConfig = true
     }
 
@@ -115,7 +117,12 @@ val helperCommonSources = rootProject.file("magisk/framework-src/common")
 val java17Compiler = extensions.getByType(JavaToolchainService::class.java).compilerFor {
     languageVersion.set(JavaLanguageVersion.of(17))
 }
-val helperJars = (33..37).associateWith { api ->
+// Build helpers only for Android SDK platforms present in this toolchain. Release builds
+// include API 37 when its platform is installed; SDK 36 CI builds still exercise the device
+// APIs available on the supported Android 16 test device without fabricating API 37 stubs.
+val helperApiLevels = (33..37).filter { sdkPath.resolve("platforms/android-$it/android.jar").isFile }
+check(helperApiLevels.isNotEmpty()) { "No Android SDK platform is installed for Magisk framework helpers" }
+val helperJars = helperApiLevels.associateWith { api ->
     val classesDirectory = layout.buildDirectory.dir("generated/magiskFramework/api$api/classes")
     val compileHelper = tasks.register<JavaCompile>("compileMagiskFrameworkApi$api") {
         val stubs = rootProject.file("magisk/framework-stubs/api$api")

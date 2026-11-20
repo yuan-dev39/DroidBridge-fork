@@ -135,6 +135,8 @@ import com.droidbridge.ui.maintenance.MaintenanceViewModel
 import com.droidbridge.ui.mcp.AgentConnectionRoute
 import com.droidbridge.ui.mcp.McpRoute
 import com.droidbridge.ui.mcp.McpViewModel
+import com.droidbridge.ui.mcp.ExternalMcpRoute
+import com.droidbridge.ui.mcp.ExternalMcpViewModel
 import com.droidbridge.ui.mcp.TunnelRoute
 import com.droidbridge.ui.mcp.TunnelViewModel
 import com.droidbridge.ui.settings.AboutRoute
@@ -165,6 +167,7 @@ import kotlinx.serialization.Serializable
 @Serializable data class AutomationEditor(val automationId: String? = null) : NavKey
 @Serializable data object AgentConnections : NavKey
 @Serializable data object MCP : NavKey
+@Serializable data object ExternalMCP : NavKey
 @Serializable data object TunnelSetup : NavKey
 @Serializable data object Diagnostics : NavKey
 @Serializable data object Settings : NavKey
@@ -482,6 +485,7 @@ private fun NavigationRoot(state: AppUiState, viewModel: AppViewModel, graph: Ap
                     viewModel = viewModel { McpViewModel(graph.client) },
                     openMcp = { backStack.add(MCP) },
                     openTunnel = { backStack.add(TunnelSetup) },
+                    openExternalMcp = { backStack.add(ExternalMCP) },
                 ) { backStack.removeLastOrNull() }
             }
             entry<MCP> {
@@ -492,6 +496,11 @@ private fun NavigationRoot(state: AppUiState, viewModel: AppViewModel, graph: Ap
                         ?.snapshot?.grants?.get("android.notifications")?.state == AvailabilityState.Unavailable,
                     shouldRequestNotifications = { shouldRequestPostNotifications(context) },
                     finishSetup = finishSetup,
+                ) { backStack.removeLastOrNull() }
+            }
+            entry<ExternalMCP> {
+                ExternalMcpRoute(
+                    viewModel = viewModel { ExternalMcpViewModel(graph.client) },
                 ) { backStack.removeLastOrNull() }
             }
             entry<TunnelSetup> {
@@ -953,7 +962,7 @@ internal fun shouldRequestPostNotifications(context: Context): Boolean {
 }
 
 @androidx.annotation.RequiresApi(37)
-private fun localNetworkPermission(): String = Manifest.permission.ACCESS_LOCAL_NETWORK
+private fun localNetworkPermission(): String = "android.permission.ACCESS_LOCAL_NETWORK"
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
