@@ -29,7 +29,7 @@ try {
 } finally { Pop-Location }
 $wf = & "$PSScriptRoot\bootstrap-winflexbison.ps1" -CacheRoot $CacheRoot
 $raw = ((Get-Content local.properties | Select-String '^sdk.dir=').Line.Substring(8))
-$sdk = $raw -replace '\\:',':' -replace '\\\\','\'
+$sdk = $raw.Replace('/', '\').Replace('\\', '\')
 $cmake = "$sdk\cmake\3.31.6\bin\cmake.exe"
 $ninja = "$sdk\cmake\3.31.6\bin\ninja.exe"
 $toolchain = "$sdk\ndk\29.0.14206865\build\cmake\android.toolchain.cmake"
