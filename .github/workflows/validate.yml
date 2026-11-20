@@ -147,7 +147,7 @@ jobs:
       - name: Build pinned Android libpcap static dependency
         shell: pwsh
         run: |
-          $sdkPath = $env:ANDROID_SDK_ROOT -replace '\\', '\\\\'
+          $sdkPath = $env:ANDROID_SDK_ROOT -replace '\\', '/'
           "sdk.dir=$sdkPath" | Out-File -FilePath local.properties -Encoding ascii
           ./tools/build-libpcap.ps1 -CacheRoot build/i0-cache
 
